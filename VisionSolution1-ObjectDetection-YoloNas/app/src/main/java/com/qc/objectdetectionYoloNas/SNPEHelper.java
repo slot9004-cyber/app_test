@@ -30,6 +30,11 @@ public class SNPEHelper {
     public native String initSNPE(AssetManager assetManager, char a);
     public native int inferSNPE(long inputmataddress, int width,int height, float[][]boxcoords, String[] classname);
 
+    public native String initYoloSegSNPE(AssetManager assetManager, char a);
+    public native String initAotGanSNPE(AssetManager assetManager, char a);
+    public native boolean inferYoloSegSNPE(long inputmataddress, long outputmaskaddress);
+    public native boolean inferAotGanSNPE(long inputmataddress, long maskaddress, long outputmataddress);
+
 
     /**
      * This method loads ML models on selected runtime

@@ -61,9 +61,14 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.support.v4.app.DialogFragment;
+import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.widget.Toast;
+
+import org.opencv.android.Utils;
+import org.opencv.core.CvType;
+import org.opencv.core.Mat;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -85,8 +90,8 @@ public class CameraFragment extends Fragment
      */
     private SNPEHelper mSnpeHelper;
     public long tic = 0,tic2=0;
-    private boolean mNetworkLoaded;
-    private FragmentRender mFragmentRender;
+    private boolean mAllNetworksLoaded;
+    private android.widget.ImageView mImageView;
 
     public int fps=0,frame_count =-1;
     public static char runtime_var;
@@ -438,7 +443,7 @@ public class CameraFragment extends Fragment
         super.onViewCreated(view, savedInstanceState);
         mTextureView = view.findViewById(R.id.surface);
         mTextureView.setSurfaceTextureListener(mSurfaceTextureListener);
-        mFragmentRender = view.findViewById(R.id.fragmentRender);
+        mImageView = view.findViewById(R.id.imageView);
 
     }
 
@@ -1026,26 +1031,26 @@ public class CameraFragment extends Fragment
                 e.printStackTrace();
             }
 
-            System.out.println("mNetworkLoaded: "+mNetworkLoaded +" runtime_var: "+runtime_var);
+            if (mAllNetworksLoaded) {
+                Bitmap bitmap = mTextureView.getBitmap();
+                if (bitmap == null) return;
 
-            if (mNetworkLoaded == true) {
-                Bitmap mBitmap = mTextureView.getBitmap(mTextureView.getWidth(),mTextureView.getHeight());
+                Mat originalImgMat = new Mat();
+                Utils.bitmapToMat(bitmap, originalImgMat);
 
-//                InputStream originalFile;
-//                try {
-//                    originalFile = getActivity().getApplicationContext().getAssets().open("ronaldo.jpg");
-//                    mBitmap = BitmapFactory.decodeStream(originalFile);
-//                    System.out.println("doing from image");
-//
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
+                Mat maskMat = new Mat(bitmap.getHeight(), bitmap.getWidth(), CvType.CV_8UC1);
+                mSnpeHelper.inferYoloSegSNPE(originalImgMat.getNativeObjAddr(), maskMat.getNativeObjAddr());
 
-                ArrayList<RectangleBox> BBlist = new ArrayList<>();
-                System.out.println("calling inference");
-//                ArrayList<float[][]> coordslist = mSnpeHelper.snpeInference(mBitmap, fps, BBlist);
-                mSnpeHelper.snpeInference(mBitmap, fps, BBlist);
-                mFragmentRender.setCoordsList(BBlist);
+                Mat maskedImage = ImageProcessor.preprocess(bitmap, maskMat, 1.0f);
+
+                Mat ganOutput = new Mat();
+                mSnpeHelper.inferAotGanSNPE(maskedImage.getNativeObjAddr(), maskMat.getNativeObjAddr(), ganOutput.getNativeObjAddr());
+
+                Bitmap finalBitmap = ImageProcessor.postprocess(ganOutput, originalImgMat, maskMat);
+
+                getActivity().runOnUiThread(() -> {
+                    mImageView.setImageBitmap(finalBitmap);
+                });
             }
         }
 
@@ -1077,20 +1082,18 @@ public class CameraFragment extends Fragment
      */
     private boolean ensureNetCreated() {
         if (mSnpeHelper == null) {
-            // load the neural network for object detection with SNPE
             mSnpeHelper = new SNPEHelper(getActivity().getApplication());
-
-            //TODO for time being disabling
-            new Thread() {
-                public void run() {
-                    mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var);
-                }
-            }.start() ;
-
-//            mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var);
-
+            new Thread(() -> {
+                // Load all three models.
+                // The user is currently using the yolo_nas_s.dlc for object detection.
+                // We will add the new models here.
+                mSnpeHelper.loadingMODELS(runtime_var);
+                mSnpeHelper.initYoloSegSNPE(getActivity().getAssets(), runtime_var);
+                mSnpeHelper.initAotGanSNPE(getActivity().getAssets(), runtime_var);
+                mAllNetworksLoaded = true; // This should be handled more robustly
+            }).start();
         }
-        return mNetworkLoaded;
+        return mAllNetworksLoaded;
     }
 
 }

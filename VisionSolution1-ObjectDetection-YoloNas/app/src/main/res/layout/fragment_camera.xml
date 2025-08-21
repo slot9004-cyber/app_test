@@ -13,8 +13,8 @@
         android:layout_height="500dp"
         />
 
-    <com.qc.objectdetectionYoloNas.FragmentRender
-        android:id="@+id/fragmentRender"
+    <ImageView
+        android:id="@+id/imageView"
         android:layout_centerInParent="true"
         android:layout_width="400dp"
         android:layout_height="500dp"

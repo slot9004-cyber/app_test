@@ -62,8 +62,13 @@ public:
 };
 
 std::string build_network_BB(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg);
+std::string build_network_yolo_seg(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg);
+std::string build_network_aot_gan(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg);
+
 bool SetAdspLibraryPath(std::string nativeLibPath);
 
 bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names);
+bool execute_yolo_seg(cv::Mat &img, cv::Mat &mask);
+bool execute_aot_gan(cv::Mat &img, cv::Mat &mask, cv::Mat &output);
 
 #endif //NATIVEINFERENCE_INFERENCE_H
