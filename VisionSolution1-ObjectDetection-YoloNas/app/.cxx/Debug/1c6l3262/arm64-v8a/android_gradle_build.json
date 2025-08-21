@@ -1,0 +1,40 @@
+{
+  "buildFiles": [
+    "C:\\Qualcomm\\qidk\\Solutions\\VisionSolution1-ObjectDetection-YoloNas\\app\\src\\main\\cpp\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\slot9\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Qualcomm\\qidk\\Solutions\\VisionSolution1-ObjectDetection-YoloNas\\app\\.cxx\\Debug\\1c6l3262\\arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\slot9\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Qualcomm\\qidk\\Solutions\\VisionSolution1-ObjectDetection-YoloNas\\app\\.cxx\\Debug\\1c6l3262\\arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "objectdetectionYoloNas::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "objectdetectionYoloNas",
+      "output": "C:\\Qualcomm\\qidk\\Solutions\\VisionSolution1-ObjectDetection-YoloNas\\app\\build\\intermediates\\cxx\\Debug\\1c6l3262\\obj\\arm64-v8a\\libobjectdetectionYoloNas.so",
+      "runtimeFiles": [
+        "C:\\Qualcomm\\qidk\\Solutions\\VisionSolution1-ObjectDetection-YoloNas\\app\\src\\main\\jniLibs\\arm64-v8a\\libSNPE.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "C:\\Users\\slot9\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\slot9\\AppData\\Local\\Android\\Sdk\\ndk\\21.4.7075529\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

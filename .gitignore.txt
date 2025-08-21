@@ -1,0 +1,8 @@
+*.tflite
+*.pt
+*.raw
+*.dlc
+*.onnx
+*.pth
+app/build/*
+*.apk

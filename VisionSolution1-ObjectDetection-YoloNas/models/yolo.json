@@ -1,0 +1,22 @@
+{
+    "Name":"yolo_nas_s",
+    "HostRootPath": "yolo_nas_s",
+    "HostResultsDir":"yolo_nas_s/results",
+    "DevicePath":"/data/local/tmp/snpebm",
+    "Devices":["de41ee15 "],
+    "HostName": "localhost",
+    "Runs":3,
+
+    "Model": {
+        "Name": "yolo_nas_s",
+        "Dlc": "app/src/main/asset/Quant_intermediate_yoloNas_s_320.dlc",
+        "InputList": "input_list.txt",
+        "Data": [
+            "./"
+            ]
+    },
+
+    "Runtimes":["GPU", "CPU", "DSP"],
+    "Measurements": ["timing"]
+
+ }

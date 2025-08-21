@@ -1,0 +1,3 @@
+C:/Qualcomm/qidk/Solutions/VisionSolution1-ObjectDetection-YoloNas/app/.cxx/Debug/1c6l3262/arm64-v8a/CMakeFiles/objectdetectionYoloNas.dir
+C:/Qualcomm/qidk/Solutions/VisionSolution1-ObjectDetection-YoloNas/app/.cxx/Debug/1c6l3262/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Qualcomm/qidk/Solutions/VisionSolution1-ObjectDetection-YoloNas/app/.cxx/Debug/1c6l3262/arm64-v8a/CMakeFiles/rebuild_cache.dir

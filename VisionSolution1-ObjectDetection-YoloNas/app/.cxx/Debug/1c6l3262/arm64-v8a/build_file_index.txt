@@ -1,0 +1,1 @@
+C:\Qualcomm\qidk\Solutions\VisionSolution1-ObjectDetection-YoloNas\app\src\main\cpp\CMakeLists.txt
