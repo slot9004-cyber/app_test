@@ -30,8 +30,6 @@
 
 std::unique_ptr<zdl::SNPE::SNPE> snpe_HRNET;
 std::unique_ptr<zdl::SNPE::SNPE> snpe_BB;
-std::unique_ptr<zdl::SNPE::SNPE> snpe_yolo_seg;
-std::unique_ptr<zdl::SNPE::SNPE> snpe_aot_gan;
 
 std::mutex mtx;
 static zdl::DlSystem::Runtime_t runtime = zdl::DlSystem::Runtime_t::CPU;
@@ -292,27 +290,3 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     return true;
 }
 
-std::string build_network_yolo_seg(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg)
-{
-    // TODO: Implement this function
-    return "yolo_seg build success";
-}
-
-std::string build_network_aot_gan(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg)
-{
-    // TODO: Implement this function
-    return "aot_gan build success";
-}
-
-bool execute_yolo_seg(cv::Mat &img, cv::Mat &mask)
-{
-    // TODO: Implement this function
-    return true;
-}
-
-bool execute_aot_gan(cv::Mat &img, cv::Mat &mask, cv::Mat &output)
-{
-    // Placeholder: just copy the input image to the output
-    img.copyTo(output);
-    return true;
-}

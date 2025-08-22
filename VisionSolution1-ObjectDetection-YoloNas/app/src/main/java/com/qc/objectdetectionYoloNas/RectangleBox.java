@@ -17,6 +17,7 @@ public class RectangleBox {
     public float bottom;
     public float left;
     public float right;
+    public boolean selected = false;
 
     public int fps;
     public String processing_time;

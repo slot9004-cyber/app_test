@@ -22,7 +22,10 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -61,14 +64,9 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.support.v4.app.DialogFragment;
-import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.widget.Toast;
-
-import org.opencv.android.Utils;
-import org.opencv.core.CvType;
-import org.opencv.core.Mat;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -90,8 +88,15 @@ public class CameraFragment extends Fragment
      */
     private SNPEHelper mSnpeHelper;
     public long tic = 0,tic2=0;
-    private boolean mAllNetworksLoaded;
-    private android.widget.ImageView mImageView;
+    private boolean mNetworkLoaded;
+    private FragmentRender mFragmentRender;
+    private android.widget.RelativeLayout selectionLayout;
+    private android.widget.LinearLayout displayLayout;
+    private android.widget.Button confirmButton;
+    private android.widget.Button backButton;
+    private android.widget.ImageView topImageView;
+    private android.widget.ImageView bottomImageView;
+
 
     public int fps=0,frame_count =-1;
     public static char runtime_var;
@@ -443,8 +448,17 @@ public class CameraFragment extends Fragment
         super.onViewCreated(view, savedInstanceState);
         mTextureView = view.findViewById(R.id.surface);
         mTextureView.setSurfaceTextureListener(mSurfaceTextureListener);
-        mImageView = view.findViewById(R.id.imageView);
+        mFragmentRender = view.findViewById(R.id.fragmentRender);
 
+        selectionLayout = view.findViewById(R.id.selectionLayout);
+        displayLayout = view.findViewById(R.id.displayLayout);
+        confirmButton = view.findViewById(R.id.confirmButton);
+        backButton = view.findViewById(R.id.backButton);
+        topImageView = view.findViewById(R.id.topImageView);
+        bottomImageView = view.findViewById(R.id.bottomImageView);
+
+        confirmButton.setOnClickListener(v -> onConfirm());
+        backButton.setOnClickListener(v -> onBack());
     }
 
     @Override
@@ -1031,26 +1045,26 @@ public class CameraFragment extends Fragment
                 e.printStackTrace();
             }
 
-            if (mAllNetworksLoaded) {
-                Bitmap bitmap = mTextureView.getBitmap();
-                if (bitmap == null) return;
+            System.out.println("mNetworkLoaded: "+mNetworkLoaded +" runtime_var: "+runtime_var);
 
-                Mat originalImgMat = new Mat();
-                Utils.bitmapToMat(bitmap, originalImgMat);
+            if (mNetworkLoaded == true) {
+                Bitmap mBitmap = mTextureView.getBitmap(mTextureView.getWidth(),mTextureView.getHeight());
 
-                Mat maskMat = new Mat(bitmap.getHeight(), bitmap.getWidth(), CvType.CV_8UC1);
-                mSnpeHelper.inferYoloSegSNPE(originalImgMat.getNativeObjAddr(), maskMat.getNativeObjAddr());
+//                InputStream originalFile;
+//                try {
+//                    originalFile = getActivity().getApplicationContext().getAssets().open("ronaldo.jpg");
+//                    mBitmap = BitmapFactory.decodeStream(originalFile);
+//                    System.out.println("doing from image");
+//
+//                } catch (IOException e) {
+//                    e.printStackTrace();
+//                }
 
-                Mat maskedImage = ImageProcessor.preprocess(bitmap, maskMat, 1.0f);
-
-                Mat ganOutput = new Mat();
-                mSnpeHelper.inferAotGanSNPE(maskedImage.getNativeObjAddr(), maskMat.getNativeObjAddr(), ganOutput.getNativeObjAddr());
-
-                Bitmap finalBitmap = ImageProcessor.postprocess(ganOutput, originalImgMat, maskMat);
-
-                getActivity().runOnUiThread(() -> {
-                    mImageView.setImageBitmap(finalBitmap);
-                });
+                ArrayList<RectangleBox> BBlist = new ArrayList<>();
+                System.out.println("calling inference");
+//                ArrayList<float[][]> coordslist = mSnpeHelper.snpeInference(mBitmap, fps, BBlist);
+                mSnpeHelper.snpeInference(mBitmap, fps, BBlist);
+                mFragmentRender.setCoordsList(BBlist);
             }
         }
 
@@ -1082,18 +1096,55 @@ public class CameraFragment extends Fragment
      */
     private boolean ensureNetCreated() {
         if (mSnpeHelper == null) {
+            // load the neural network for object detection with SNPE
             mSnpeHelper = new SNPEHelper(getActivity().getApplication());
-            new Thread(() -> {
-                // Load all three models.
-                // The user is currently using the yolo_nas_s.dlc for object detection.
-                // We will add the new models here.
-                mSnpeHelper.loadingMODELS(runtime_var);
-                mSnpeHelper.initYoloSegSNPE(getActivity().getAssets(), runtime_var);
-                mSnpeHelper.initAotGanSNPE(getActivity().getAssets(), runtime_var);
-                mAllNetworksLoaded = true; // This should be handled more robustly
-            }).start();
+
+            //TODO for time being disabling
+            new Thread() {
+                public void run() {
+                    mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var);
+                }
+            }.start() ;
+
+//            mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var);
+
         }
-        return mAllNetworksLoaded;
+        return mNetworkLoaded;
     }
 
+    private void onConfirm() {
+        selectionLayout.setVisibility(View.GONE);
+        displayLayout.setVisibility(View.VISIBLE);
+
+        Bitmap bitmap = mTextureView.getBitmap();
+        if (bitmap == null) return;
+
+        // Set top image
+        topImageView.setImageBitmap(bitmap);
+
+        // Create bottom image with white boxes
+        Bitmap bottomBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+        Canvas canvas = new Canvas(bottomBitmap);
+        Paint whitePaint = new Paint();
+        whitePaint.setColor(Color.WHITE);
+        whitePaint.setStyle(Paint.Style.FILL);
+
+        ArrayList<RectangleBox> boxes = mFragmentRender.getBoxlist();
+        for (RectangleBox box : boxes) {
+            if (!box.selected) {
+                // The coordinate mapping is confusing, let's use the same logic as onDraw
+                float y = box.left;
+                float y1 = box.right;
+                float x = box.top;
+                float x1 = box.bottom;
+                canvas.drawRect(x1, y, x, y1, whitePaint);
+            }
+        }
+        bottomImageView.setImageBitmap(bottomBitmap);
+    }
+
+    private void onBack() {
+        displayLayout.setVisibility(View.GONE);
+        selectionLayout.setVisibility(View.VISIBLE);
+    }
 }

@@ -151,47 +151,5 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
     }
     //LOGD("infer SNPE E");
     return numberofobj;
-}
 
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_qc_objectdetectionYoloNas_SNPEHelper_initYoloSegSNPE(JNIEnv *env, jobject thiz, jobject asset_manager, jchar runtime) {
-    AAssetManager* mgr = AAssetManager_fromJava(env, asset_manager);
-    AAsset* asset = AAssetManager_open(mgr, "yolov8s-seg.dlc", AASSET_MODE_UNKNOWN);
-    // TODO: Add error handling
-    long dlc_size = AAsset_getLength(asset);
-    char* dlc_buffer = (char*) malloc(sizeof(char) * dlc_size);
-    AAsset_read(asset, dlc_buffer, dlc_size);
-    std::string result = build_network_yolo_seg(reinterpret_cast<const uint8_t *>(dlc_buffer), dlc_size, runtime);
-    return env->NewStringUTF(result.c_str());
-}
-
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_qc_objectdetectionYoloNas_SNPEHelper_initAotGanSNPE(JNIEnv *env, jobject thiz, jobject asset_manager, jchar runtime) {
-    AAssetManager* mgr = AAssetManager_fromJava(env, asset_manager);
-    AAsset* asset = AAssetManager_open(mgr, "aotgan.dlc", AASSET_MODE_UNKNOWN);
-    // TODO: Add error handling
-    long dlc_size = AAsset_getLength(asset);
-    char* dlc_buffer = (char*) malloc(sizeof(char) * dlc_size);
-    AAsset_read(asset, dlc_buffer, dlc_size);
-    std::string result = build_network_aot_gan(reinterpret_cast<const uint8_t *>(dlc_buffer), dlc_size, runtime);
-    return env->NewStringUTF(result.c_str());
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferYoloSegSNPE(JNIEnv *env, jobject thiz, jlong inputmataddress, jlong outputmaskaddress) {
-    cv::Mat &img = *(cv::Mat*) inputmataddress;
-    cv::Mat &mask = *(cv::Mat*) outputmaskaddress;
-    return execute_yolo_seg(img, mask);
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferAotGanSNPE(JNIEnv *env, jobject thiz, jlong inputmataddress, jlong maskaddress, jlong outputmataddress) {
-    cv::Mat &img = *(cv::Mat*) inputmataddress;
-    cv::Mat &mask = *(cv::Mat*) maskaddress;
-    cv::Mat &output = *(cv::Mat*) outputmataddress;
-    return execute_aot_gan(img, mask, output);
 }
