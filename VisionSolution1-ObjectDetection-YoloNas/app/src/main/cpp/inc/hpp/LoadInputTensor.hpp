@@ -23,7 +23,10 @@ bool loadInputUserBuffer_pose(std::unordered_map<std::string, std::vector<float3
                          zdl::DlSystem::UserBufferMap& inputMap,
                          int bitWidth, double center[], double scale[], const float &top, const float &bottom, const float &left, const float &right);
 
-bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
+#include "inference.h"
+
+bool loadInputUserBuffer_BB(PaddingInfo& padding_info,
+                            std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
                          std::unique_ptr<zdl::SNPE::SNPE>& snpe,
                          cv::Mat &model_input,
                          zdl::DlSystem::UserBufferMap& inputMap,

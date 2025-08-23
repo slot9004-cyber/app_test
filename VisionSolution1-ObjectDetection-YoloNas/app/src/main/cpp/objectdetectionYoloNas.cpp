@@ -114,18 +114,18 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_initSNPE(JNIEnv *env, jobject thiz
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thiz, jlong inputMat, jint actual_width, jint actual_height,
-                                               jobjectArray jboxcoords, jobjectArray objnames) {
+                                               jobjectArray jboxcoords, jobjectArray objnames, jlong outputmaskaddress) {
 
     LOGI("infer SNPE S");
 
     cv::Mat &img = *(cv::Mat*) inputMat;
+    cv::Mat &output_mask = *(cv::Mat*) outputmaskaddress;
     std::string bs;
     int numberofobj = 0;
     std::vector<std::vector<float>> BB_coords;
     std::vector<std::string> BB_names;
-    cv::Mat combined_mask;
 
-    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names, combined_mask);
+    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names, output_mask);
 
     if(numberofobj ==0)
         {

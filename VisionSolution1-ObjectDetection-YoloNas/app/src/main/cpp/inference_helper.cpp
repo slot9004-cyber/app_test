@@ -236,27 +236,41 @@ void createInputBufferMap(zdl::DlSystem::UserBufferMap& inputMap,
     }
 }
 
-void preprocess_BB(std::vector<float32_t> &dest_buffer, cv::Mat &img)
+void preprocess_BB(std::vector<float32_t> &dest_buffer, cv::Mat &img, PaddingInfo& padding_info)
 {
+    int input_width = 512;
+    int input_height = 512;
+    int img_width = img.cols;
+    int img_height = img.rows;
+
+    padding_info.scale = std::min((float)input_width / img_width, (float)input_height / img_height);
+    int scaled_width = (int)(img_width * padding_info.scale);
+    int scaled_height = (int)(img_height * padding_info.scale);
+    padding_info.scaled_width = scaled_width;
+    padding_info.scaled_height = scaled_height;
+
     cv::Mat resized_img;
-    cv::resize(img,resized_img,cv::Size(512,512),cv::INTER_LINEAR);  //TODO get the size from model itself
+    cv::resize(img, resized_img, cv::Size(scaled_width, scaled_height), 0, 0, cv::INTER_LINEAR);
+
+    padding_info.pad_x = (input_width - scaled_width) / 2;
+    padding_info.pad_y = (input_height - scaled_height) / 2;
+
+    cv::Mat padded_img;
+    cv::copyMakeBorder(resized_img, padded_img, padding_info.pad_y, input_height - scaled_height - padding_info.pad_y, padding_info.pad_x, input_width - scaled_width - padding_info.pad_x, cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
 
     float inputScale = 0.00392156862745f;    //normalization value, this is 1/255
-
     float * accumulator = reinterpret_cast<float *> (&dest_buffer[0]);
 
-    //opencv read in BGRA by default
-    cvtColor(resized_img, resized_img, CV_BGRA2BGR);
-    LOGI("num of channels: %d",resized_img.channels());
-    int lim = resized_img.rows*resized_img.cols*3;
+    cvtColor(padded_img, padded_img, CV_BGRA2BGR);
+    int lim = padded_img.rows*padded_img.cols*3;
     for(int idx = 0; idx<lim; idx++)
-        accumulator[idx]= resized_img.data[idx]*inputScale;
-
+        accumulator[idx]= padded_img.data[idx]*inputScale;
 }
 
 
 //Preprocessing and loading in application Input Buffer for BB
-bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
+bool loadInputUserBuffer_BB(PaddingInfo& padding_info,
+                            std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
                             std::unique_ptr<zdl::SNPE::SNPE>& snpe,
                             cv::Mat &img,
                             zdl::DlSystem::UserBufferMap& inputMap,
@@ -280,7 +294,7 @@ bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_
             return false;
         } else {
 
-            preprocess_BB(applicationBuffers.at(name),img);  //functions loads data in applicationBuffer
+            preprocess_BB(applicationBuffers.at(name),img, padding_info);  //functions loads data in applicationBuffer
 
         }
     }
