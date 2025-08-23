@@ -22,10 +22,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Matrix;
-import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -96,7 +93,8 @@ public class CameraFragment extends Fragment
     private android.widget.Button backButton;
     private android.widget.ImageView topImageView;
     private android.widget.ImageView bottomImageView;
-
+    private java.util.ArrayList<RectangleBox> selectedBoxes = new java.util.ArrayList<>();
+    private boolean isConfirmed = false;
 
     public int fps=0,frame_count =-1;
     public static char runtime_var;
@@ -459,6 +457,15 @@ public class CameraFragment extends Fragment
 
         confirmButton.setOnClickListener(v -> onConfirm());
         backButton.setOnClickListener(v -> onBack());
+
+        mFragmentRender.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                if (!isConfirmed) { // Only handle touch in selection mode
+                    handleTouch(event.getX(), event.getY());
+                }
+            }
+            return true;
+        });
     }
 
     @Override
@@ -1001,12 +1008,9 @@ public class CameraFragment extends Fragment
             mCaptureSession = cameraCaptureSession;
 
             try {
-                // Auto focus should be continuous for camera preview.
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
                         CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                // Flash is automatically enabled when necessary.
                 setAutoFlash(mPreviewRequestBuilder);
-                // Finally, we start displaying the camera preview.
                 mPreviewRequest = mPreviewRequestBuilder.build();
                 cameraCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), new CameraSession(),
                         mBackgroundHandler);
@@ -1019,132 +1023,160 @@ public class CameraFragment extends Fragment
         public void onConfigureFailed(@NonNull android.hardware.camera2.CameraCaptureSession
                                               cameraCaptureSession) {
         }
+    }
 
+    private ArrayList<RectangleBox> trackSelectedObjects(ArrayList<RectangleBox> newBoxes) {
+        ArrayList<RectangleBox> nextSelectedBoxes = new ArrayList<>();
+        if (!selectedBoxes.isEmpty()) {
+            for (RectangleBox selectedBox : selectedBoxes) {
+                float minDistance = Float.MAX_VALUE;
+                RectangleBox bestMatch = null;
+                for (RectangleBox newBox : newBoxes) {
+                    if (newBox.label.equals("person")) {
+                        float distance = getCenterDistance(selectedBox, newBox);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            bestMatch = newBox;
+                        }
+                    }
+                }
+                if (bestMatch != null && minDistance < 75) { // 75px threshold for tracking
+                    nextSelectedBoxes.add(bestMatch);
+                }
+            }
+        }
+        selectedBoxes = nextSelectedBoxes;
+
+        for (RectangleBox newBox : newBoxes) {
+            newBox.selected = false; // Reset all
+            for (RectangleBox selectedBox : selectedBoxes) {
+                if (newBox == selectedBox) {
+                    newBox.selected = true;
+                    break;
+                }
+            }
+        }
+        return newBoxes;
     }
 
     private class CameraSession extends android.hardware.camera2.CameraCaptureSession.CaptureCallback {
-
         @Override
         public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull
                 CaptureRequest request, @NonNull TotalCaptureResult result) {
-
             super.onCaptureCompleted(session, request, result);
-//            int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
-            frame_count+=1;
-
+            frame_count++;
             try {
-                if (frame_count == 0) {
-                    tic = System.currentTimeMillis();
-                } else {
+                if (frame_count == 0) tic = System.currentTimeMillis();
+                else {
                     tic2 = System.currentTimeMillis();
                     fps = (int) (1000 / (tic2 - tic));
                     tic = System.currentTimeMillis();
                 }
+            } catch (Exception e) { e.printStackTrace(); }
+
+            if (mNetworkLoaded) {
+                Bitmap mBitmap = mTextureView.getBitmap();
+                if (mBitmap == null) return;
+
+                ArrayList<RectangleBox> newBoxes = new ArrayList<>();
+                mSnpeHelper.snpeInference(mBitmap, fps, newBoxes);
+                ArrayList<RectangleBox> trackedBoxes = trackSelectedObjects(newBoxes);
+
+                if (!isConfirmed) {
+                    mFragmentRender.setCoordsList(trackedBoxes);
+                } else {
+                    final Bitmap topBitmap = mBitmap;
+                    getActivity().runOnUiThread(() -> topImageView.setImageBitmap(topBitmap));
+
+                    Bitmap bottomBitmap = mBitmap.copy(Bitmap.Config.ARGB_8888, true);
+                    Canvas canvas = new Canvas(bottomBitmap);
+                    Paint whitePaint = new Paint();
+                    whitePaint.setColor(Color.WHITE);
+                    whitePaint.setStyle(Paint.Style.FILL);
+
+                    for (RectangleBox box : trackedBoxes) {
+                        if (!box.selected && box.label.equals("person")) {
+                            float left = box.bottom;
+                            float right = box.top;
+                            float top = box.left;
+                            float bottom = box.right;
+                            canvas.drawRect(left, top, right, bottom, whitePaint);
+                        }
+                    }
+                    final Bitmap finalBottomBitmap = bottomBitmap;
+                    getActivity().runOnUiThread(() -> bottomImageView.setImageBitmap(finalBottomBitmap));
+                }
             }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
-
-            System.out.println("mNetworkLoaded: "+mNetworkLoaded +" runtime_var: "+runtime_var);
-
-            if (mNetworkLoaded == true) {
-                Bitmap mBitmap = mTextureView.getBitmap(mTextureView.getWidth(),mTextureView.getHeight());
-
-//                InputStream originalFile;
-//                try {
-//                    originalFile = getActivity().getApplicationContext().getAssets().open("ronaldo.jpg");
-//                    mBitmap = BitmapFactory.decodeStream(originalFile);
-//                    System.out.println("doing from image");
-//
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-
-                ArrayList<RectangleBox> BBlist = new ArrayList<>();
-                System.out.println("calling inference");
-//                ArrayList<float[][]> coordslist = mSnpeHelper.snpeInference(mBitmap, fps, BBlist);
-                mSnpeHelper.snpeInference(mBitmap, fps, BBlist);
-                mFragmentRender.setCoordsList(BBlist);
-            }
         }
-
-        @Override
-        public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull
-                CaptureRequest request, @NonNull CaptureFailure failure) {
-            super.onCaptureFailed(session, request, failure);
-        }
-
-        @Override
-        public void onCaptureProgressed(@NonNull CameraCaptureSession session, @NonNull
-                CaptureRequest request, @NonNull CaptureResult partialResult) {
-            super.onCaptureProgressed(session, request, partialResult);
-        }
-
-        @Override
-        public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull
-                CaptureRequest request, long timestamp, long frameNumber) {
-            super.onCaptureStarted(session, request, timestamp, frameNumber);
-
-        }
-
     }
 
-    /**
-     * Method to ensure if neural network is loaded
-     *
-     * @return
-     */
     private boolean ensureNetCreated() {
         if (mSnpeHelper == null) {
-            // load the neural network for object detection with SNPE
             mSnpeHelper = new SNPEHelper(getActivity().getApplication());
-
-            //TODO for time being disabling
-            new Thread() {
-                public void run() {
-                    mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var);
-                }
-            }.start() ;
-
-//            mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var);
-
+            new Thread(() -> mNetworkLoaded = mSnpeHelper.loadingMODELS(runtime_var)).start();
         }
         return mNetworkLoaded;
     }
 
     private void onConfirm() {
+        if (selectedBoxes.isEmpty()) {
+            showToast("Please select at least one person.");
+            return;
+        }
+        isConfirmed = true;
         selectionLayout.setVisibility(View.GONE);
         displayLayout.setVisibility(View.VISIBLE);
-
-        Bitmap bitmap = mTextureView.getBitmap();
-        if (bitmap == null) return;
-
-        // Set top image
-        topImageView.setImageBitmap(bitmap);
-
-        // Create bottom image with white boxes
-        Bitmap bottomBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-        Canvas canvas = new Canvas(bottomBitmap);
-        Paint whitePaint = new Paint();
-        whitePaint.setColor(Color.WHITE);
-        whitePaint.setStyle(Paint.Style.FILL);
-
-        ArrayList<RectangleBox> boxes = mFragmentRender.getBoxlist();
-        for (RectangleBox box : boxes) {
-            if (!box.selected) {
-                // The coordinate mapping is confusing, let's use the same logic as onDraw
-                float y = box.left;
-                float y1 = box.right;
-                float x = box.top;
-                float x1 = box.bottom;
-                canvas.drawRect(x1, y, x, y1, whitePaint);
-            }
-        }
-        bottomImageView.setImageBitmap(bottomBitmap);
+        mFragmentRender.setVisibility(View.GONE);
     }
 
     private void onBack() {
+        isConfirmed = false;
         displayLayout.setVisibility(View.GONE);
         selectionLayout.setVisibility(View.VISIBLE);
+        mFragmentRender.setVisibility(View.VISIBLE);
+        selectedBoxes.clear();
+    }
+
+    private void handleTouch(float x, float y) {
+        ArrayList<RectangleBox> currentBoxes = mFragmentRender.getBoxlist();
+        if (currentBoxes == null) return;
+
+        RectangleBox tappedBox = null;
+        for (RectangleBox box : currentBoxes) {
+            float left = box.bottom;
+            float right = box.top;
+            float top = box.left;
+            float bottom = box.right;
+            if (x >= left && x <= right && y >= top && y <= bottom) {
+                tappedBox = box;
+                break;
+            }
+        }
+
+        if (tappedBox != null) {
+            boolean alreadySelected = false;
+            int removeIndex = -1;
+            for (int i = 0; i < selectedBoxes.size(); i++) {
+                if (getCenterDistance(selectedBoxes.get(i), tappedBox) < 20) { // 20px threshold
+                    alreadySelected = true;
+                    removeIndex = i;
+                    break;
+                }
+            }
+
+            if (alreadySelected) {
+                selectedBoxes.remove(removeIndex);
+            } else {
+                selectedBoxes.add(tappedBox);
+            }
+        }
+    }
+
+    private float getCenterDistance(RectangleBox b1, RectangleBox b2) {
+        float b1_cx = (b1.bottom + b1.top) / 2;
+        float b1_cy = (b1.left + b1.right) / 2;
+        float b2_cx = (b2.bottom + b2.top) / 2;
+        float b2_cy = (b2.left + b2.right) / 2;
+        return (float) Math.sqrt(Math.pow(b1_cx - b2_cx, 2) + Math.pow(b1_cy - b2_cy, 2));
     }
 }

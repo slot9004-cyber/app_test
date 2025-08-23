@@ -13,7 +13,6 @@ import android.graphics.Typeface;
 import android.os.Trace;
 import android.support.annotation.Nullable;
 import android.util.AttributeSet;
-import android.view.MotionEvent;
 import android.view.View;
 
 
@@ -56,10 +55,6 @@ public class FragmentRender extends View {
         postInvalidate();
     }
 
-    public ArrayList<RectangleBox> getBoxlist() {
-        return boxlist;
-    }
-
 
     private void init() {
         mTextColor.setTypeface(Typeface.DEFAULT_BOLD);
@@ -76,24 +71,6 @@ public class FragmentRender extends View {
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            float x = event.getX();
-            float y = event.getY();
-            mLock.lock();
-            for (RectangleBox box : boxlist) {
-                if (x >= box.bottom && x <= box.top && y >= box.left && y <= box.right) {
-                    box.selected = !box.selected;
-                    postInvalidate(); // Redraw
-                    break; // Assume boxes don't overlap
-                }
-            }
-            mLock.unlock();
-        }
-        return true;
-    }
-
-    @Override
     protected void onDraw(Canvas canvas) {
         mLock.lock();
         if (boxlist == null || boxlist.isEmpty()) {
@@ -104,7 +81,6 @@ public class FragmentRender extends View {
         // Draw FPS once
         String fps_textLabel = "FPS: " + String.valueOf(boxlist.get(0).fps);
         canvas.drawText(fps_textLabel, 10, 70, mTextColor);
-
 
         for (RectangleBox rbox : boxlist) {
             float y_coord = rbox.left;
