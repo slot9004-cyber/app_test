@@ -189,7 +189,9 @@ std::string build_network_BB(const uint8_t * dlc_buffer_BB, const size_t dlc_siz
 
 
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask) {
+#include <opencv2/imgproc.hpp>
+
+bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask, bool generate_mask) {
 
     LOGI("execute_net_BB");
     ATrace_beginSection("preprocessing");
@@ -260,7 +262,8 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     cv::Mat proposals(CHANNELS_PER_PROPOSAL, NUM_PROPOSALS, CV_32F, output0_buffer.data());
     cv::Mat proposals_t = proposals.t();
 
-    std::vector<cv::Rect> boxes;
+    std::vector<cv::Rect> boxes; // Bounding boxes in original image coordinates for NMS
+    std::vector<cv::Rect> padded_boxes; // Bounding boxes in padded 512x512 coordinates for mask cropping
     std::vector<float> confs;
     std::vector<cv::Mat> proposal_mask_coeffs;
 
@@ -281,13 +284,20 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
             float w = box_coords.at<float>(0,2);
             float h = box_coords.at<float>(0,3);
 
-            // Scale boxes to original image coordinates, accounting for padding
-            int left = static_cast<int>((cx - 0.5 * w - padding_info.pad_x) / padding_info.scale);
-            int top = static_cast<int>((cy - 0.5 * h - padding_info.pad_y) / padding_info.scale);
-            int width = static_cast<int>(w / padding_info.scale);
-            int height = static_cast<int>(h / padding_info.scale);
+            // Box in padded 512x512 space
+            int padded_left = static_cast<int>(cx - 0.5 * w);
+            int padded_top = static_cast<int>(cy - 0.5 * h);
+            int padded_width = static_cast<int>(w);
+            int padded_height = static_cast<int>(h);
+            padded_boxes.push_back(cv::Rect(padded_left, padded_top, padded_width, padded_height));
 
-            boxes.push_back(cv::Rect(left, top, width, height));
+            // Box in original image space (for NMS)
+            int orig_left = static_cast<int>((cx - 0.5 * w - padding_info.pad_x) / padding_info.scale);
+            int orig_top = static_cast<int>((cy - 0.5 * h - padding_info.pad_y) / padding_info.scale);
+            int orig_width = static_cast<int>(w / padding_info.scale);
+            int orig_height = static_cast<int>(h / padding_info.scale);
+            boxes.push_back(cv::Rect(orig_left, orig_top, orig_width, orig_height));
+
             proposal_mask_coeffs.push_back(proposal.colRange(4 + NUM_CLASSES, CHANNELS_PER_PROPOSAL));
         }
     }
@@ -298,33 +308,57 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     numberofobj = nms_result.size();
     BB_coords.clear();
     BB_names.clear();
-    combined_mask = cv::Mat::zeros(orig_height, orig_width, CV_8U);
-    cv::Mat proto_masks(MASK_COEFFS, MASK_WIDTH * MASK_HEIGHT, CV_32F, output1_buffer.data());
 
-    for (int idx : nms_result) {
-        cv::Rect box = boxes[idx];
-        BB_coords.push_back({(float)box.x, (float)box.y, (float)(box.x + box.width), (float)(box.y + box.height), milli_time});
-        BB_names.push_back("person");
+    if (generate_mask) {
+        combined_mask = cv::Mat::zeros(orig_height, orig_width, CV_8U);
+        cv::Mat proto_masks(MASK_COEFFS, MASK_WIDTH * MASK_HEIGHT, CV_32F, output1_buffer.data());
 
-        cv::Mat mask_coeffs = proposal_mask_coeffs[idx];
-        cv::Mat matmul_result;
-        cv::gemm(mask_coeffs, proto_masks, 1.0, cv::Mat(), 0.0, matmul_result);
-        cv::Mat final_mask = matmul_result.reshape(1, {MASK_HEIGHT, MASK_WIDTH});
+        for (int idx : nms_result) {
+            cv::Rect orig_box = boxes[idx];
+            BB_coords.push_back({(float)orig_box.x, (float)orig_box.y, (float)(orig_box.x + orig_box.width), (float)(orig_box.y + orig_box.height), milli_time});
+            BB_names.push_back("person");
 
-        cv::exp(-final_mask, final_mask);
-        final_mask = 1.0 / (1.0 + final_mask);
-        cv::Mat binary_mask = final_mask > 0.5;
+            cv::Mat mask_coeffs = proposal_mask_coeffs[idx];
+            cv::Mat matmul_result;
+            cv::gemm(mask_coeffs, proto_masks, 1.0, cv::Mat(), 0.0, matmul_result);
+            cv::Mat final_mask = matmul_result.reshape(1, {MASK_HEIGHT, MASK_WIDTH});
 
-        // Remove padding from mask and resize to original image dimensions
-        cv::Mat resized_mask_padded;
-        cv::resize(binary_mask, resized_mask_padded, cv::Size(INPUT_WIDTH, INPUT_HEIGHT));
-        cv::Rect crop_rect(padding_info.pad_x, padding_info.pad_y, padding_info.scaled_width, padding_info.scaled_height);
-        cv::Mat cropped_mask = resized_mask_padded(crop_rect);
+            cv::exp(-final_mask, final_mask);
+            final_mask = 1.0 / (1.0 + final_mask);
+            cv::Mat binary_mask = final_mask > 0.5;
 
-        cv::Mat upscaled_mask;
-        cv::resize(cropped_mask, upscaled_mask, cv::Size(orig_width, orig_height), 0, 0, cv::INTER_NEAREST);
+            // --- New Mask Logic ---
+            cv::Rect padded_box = padded_boxes[idx];
 
-        combined_mask |= upscaled_mask;
+            // Scale the padded box to 160x160 mask coordinates
+            cv::Rect mask_box;
+            mask_box.x = static_cast<int>(padded_box.x * MASK_WIDTH / INPUT_WIDTH);
+            mask_box.y = static_cast<int>(padded_box.y * MASK_HEIGHT / INPUT_HEIGHT);
+            mask_box.width = static_cast<int>(padded_box.width * MASK_WIDTH / INPUT_WIDTH);
+            mask_box.height = static_cast<int>(padded_box.height * MASK_HEIGHT / INPUT_HEIGHT);
+            mask_box &= cv::Rect(0, 0, MASK_WIDTH, MASK_HEIGHT);
+
+            if (mask_box.width <= 0 || mask_box.height <= 0) continue;
+
+            // Crop the 160x160 mask
+            cv::Mat cropped_mask_proto = binary_mask(mask_box);
+
+            // Resize the cropped mask to the original bounding box size
+            cv::Mat resized_cropped_mask;
+            cv::resize(cropped_mask_proto, resized_cropped_mask, cv::Size(orig_box.width, orig_box.height));
+
+            // Place the final mask on the combined mask at the correct location
+            cv::Rect roi = orig_box & cv::Rect(0,0, orig_width, orig_height);
+            if(roi.width > 0 && roi.height > 0) {
+                 resized_cropped_mask.copyTo(combined_mask(orig_box), resized_cropped_mask);
+            }
+        }
+    } else {
+        for (int idx : nms_result) {
+            cv::Rect box = boxes[idx];
+            BB_coords.push_back({(float)box.x, (float)box.y, (float)(box.x + box.width), (float)(box.y + box.height), milli_time});
+            BB_names.push_back("person");
+        }
     }
 
     ATrace_endSection();

@@ -83,6 +83,7 @@ public class CameraFragment extends Fragment {
     private ImageView bottomImageView;
     private ArrayList<RectangleBox> selectedBoxes = new ArrayList<>();
     private boolean isConfirmed = false;
+    private Bitmap lastBitmap = null;
 
     public int fps = 0, frame_count = -1;
     public static char runtime_var;
@@ -514,49 +515,15 @@ public class CameraFragment extends Fragment {
                 }
             } catch (Exception e) { e.printStackTrace(); }
 
-            if (mNetworkLoaded) {
-                Bitmap mBitmap = mTextureView.getBitmap();
-                if (mBitmap == null) return;
+            if (mNetworkLoaded && !isConfirmed) {
+                lastBitmap = mTextureView.getBitmap();
+                if (lastBitmap == null) return;
 
                 ArrayList<RectangleBox> newBoxes = new ArrayList<>();
-                org.opencv.core.Mat returnedMask = mSnpeHelper.snpeInference(mBitmap, fps, newBoxes);
+                // Only get bounding boxes for live preview
+                mSnpeHelper.snpeInference(lastBitmap, fps, newBoxes, false);
                 ArrayList<RectangleBox> trackedBoxes = trackSelectedObjects(newBoxes);
-
-                if (!isConfirmed) {
-                    mFragmentRender.setCoordsList(trackedBoxes);
-                } else {
-                    // Create the top view: original image + mask
-                    Bitmap topBitmap = mBitmap.copy(Bitmap.Config.ARGB_8888, true);
-                    Bitmap maskBitmap = Bitmap.createBitmap(topBitmap.getWidth(), topBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-                    if (returnedMask != null && !returnedMask.empty()) {
-                        Utils.matToBitmap(returnedMask, maskBitmap);
-                    }
-
-                    Canvas canvas = new Canvas(topBitmap);
-                    Paint paint = new Paint();
-                    paint.setColor(Color.WHITE);
-                    paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN)); // This is not quite right for overlay
-                    // A better way is to use addWeighted or draw the mask with some alpha
-                    Bitmap finalMaskBitmap = maskBitmap;
-                    getActivity().runOnUiThread(() -> {
-                        // Create a bitmap for the overlay
-                        Bitmap overlayBitmap = Bitmap.createBitmap(topBitmap.getWidth(), topBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-                        Canvas overlayCanvas = new Canvas(overlayBitmap);
-                        Paint overlayPaint = new Paint();
-                        overlayPaint.setColor(Color.argb(128, 255, 255, 255)); // White with 50% alpha
-                        overlayCanvas.drawBitmap(finalMaskBitmap, 0, 0, overlayPaint);
-
-                        // Draw the overlay on top of the original image
-                        Canvas finalCanvas = new Canvas(topBitmap);
-                        finalCanvas.drawBitmap(overlayBitmap, 0,0, null);
-
-
-                        topImageView.setImageBitmap(topBitmap);
-
-                        // Create the bottom view: just the mask
-                        bottomImageView.setImageBitmap(finalMaskBitmap);
-                    });
-                }
+                mFragmentRender.setCoordsList(trackedBoxes);
             }
         }
     }
@@ -574,12 +541,43 @@ public class CameraFragment extends Fragment {
             showToast("Please select at least one person.");
             return;
         }
+        if (lastBitmap == null) {
+            showToast("Please wait for camera preview.");
+            return;
+        }
+
+        // Run inference one more time with mask generation enabled
+        ArrayList<RectangleBox> finalBoxes = new ArrayList<>();
+        org.opencv.core.Mat returnedMask = mSnpeHelper.snpeInference(lastBitmap, fps, finalBoxes, true);
+
+        // --- UI Update ---
         isConfirmed = true;
         confirmButton.setVisibility(View.GONE);
         mFragmentRender.setVisibility(View.GONE);
         backButton.setVisibility(View.VISIBLE);
         snapshotButton.setVisibility(View.VISIBLE);
         splitScreenLayout.setVisibility(View.VISIBLE);
+
+        // Create and display the bitmaps for the split-screen view
+        Bitmap topBitmap = lastBitmap.copy(Bitmap.Config.ARGB_8888, true);
+        Bitmap maskBitmap = Bitmap.createBitmap(topBitmap.getWidth(), topBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+        if (returnedMask != null && !returnedMask.empty()) {
+            Utils.matToBitmap(returnedMask, maskBitmap);
+        }
+
+        // Create a bitmap for the overlay
+        Bitmap overlayBitmap = Bitmap.createBitmap(topBitmap.getWidth(), topBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas overlayCanvas = new Canvas(overlayBitmap);
+        Paint overlayPaint = new Paint();
+        overlayPaint.setColor(Color.argb(128, 255, 255, 255)); // White with 50% alpha
+        overlayCanvas.drawBitmap(maskBitmap, 0, 0, overlayPaint);
+
+        // Draw the overlay on top of the original image
+        Canvas finalCanvas = new Canvas(topBitmap);
+        finalCanvas.drawBitmap(overlayBitmap, 0,0, null);
+
+        topImageView.setImageBitmap(topBitmap);
+        bottomImageView.setImageBitmap(maskBitmap);
     }
 
     private void onBack() {

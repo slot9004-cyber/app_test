@@ -74,6 +74,6 @@ bool SetAdspLibraryPath(std::string nativeLibPath);
 
 #include <opencv2/core/mat.hpp>
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask);
+bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask, bool generate_mask);
 
 #endif //NATIVEINFERENCE_INFERENCE_H
