@@ -73,10 +73,11 @@ public class SNPEHelper {
             for(int k=0;k<numhuman;k++) {
                 RectangleBox tempbox = new RectangleBox();
 
-                tempbox.top = boxCoords[k][0];
-                tempbox.bottom = boxCoords[k][1];
-                tempbox.left = boxCoords[k][2];
-                tempbox.right = boxCoords[k][3];
+                // Standard coordinate system: left, top, right, bottom
+                tempbox.left = boxCoords[k][0];
+                tempbox.top = boxCoords[k][1];
+                tempbox.right = boxCoords[k][2];
+                tempbox.bottom = boxCoords[k][3];
                 tempbox.fps = fps;
                 tempbox.processing_time = String.valueOf(boxCoords[k][4]);
                 tempbox.label = boxnames[k];

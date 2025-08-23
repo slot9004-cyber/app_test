@@ -39,20 +39,22 @@ public class FragmentRender extends View {
 
     public void setCoordsList(ArrayList<RectangleBox> t_boxlist) {
         mLock.lock();
-        postInvalidate();
-
-        if (boxlist==null)
-        {
-            mLock.unlock();
-            return;
+        if (boxlist == null) {
+            boxlist = new ArrayList<>();
         }
         boxlist.clear();
-        for(int j=0;j<t_boxlist.size();j++) {
-            System.out.println("writing boxList in java");
-            boxlist.add(t_boxlist.get(j));
-        }
+        boxlist.addAll(t_boxlist);
         mLock.unlock();
         postInvalidate();
+    }
+
+    public ArrayList<RectangleBox> getBoxlist() {
+        mLock.lock();
+        try {
+            return boxlist;
+        } finally {
+            mLock.unlock();
+        }
     }
 
 
@@ -83,11 +85,6 @@ public class FragmentRender extends View {
         canvas.drawText(fps_textLabel, 10, 70, mTextColor);
 
         for (RectangleBox rbox : boxlist) {
-            float y_coord = rbox.left;
-            float y1_coord = rbox.right;
-            float x_coord = rbox.top;
-            float x1_coord = rbox.bottom;
-
             if (rbox.selected) {
                 mBorderColor.setColor(Color.GREEN);
             } else {
@@ -96,9 +93,10 @@ public class FragmentRender extends View {
 
             String processingTimeTextLabel = rbox.processing_time + "ms";
 
-            canvas.drawRect(x1_coord, y_coord, x_coord, y1_coord, mBorderColor);
-            canvas.drawText(rbox.label, x1_coord + 10, y_coord + 40, mTextColor);
-            canvas.drawText(processingTimeTextLabel, x1_coord + 10, y_coord + 90, mTextColor);
+            // Use standard coordinates: left, top, right, bottom
+            canvas.drawRect(rbox.left, rbox.top, rbox.right, rbox.bottom, mBorderColor);
+            canvas.drawText(rbox.label, rbox.left + 10, rbox.top + 40, mTextColor);
+            canvas.drawText(processingTimeTextLabel, rbox.left + 10, rbox.top + 90, mTextColor);
         }
         mLock.unlock();
     }

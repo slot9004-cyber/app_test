@@ -270,17 +270,13 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     //LOGI("ratio1 %f :: ratio_2 %f",ratio_1,ratio_2);
 
     for(int k=0;k<numberofobj;k++) {
-        float top,bottom,left,right;
-        left = reslist[k].y1 * ratio_1;   //y1
-        right = reslist[k].y2 * ratio_1;  //y2
+        // Standardize coordinate system: left, top, right, bottom
+        float left = reslist[k].x1 * ratio_2;
+        float top = reslist[k].y1 * ratio_1;
+        float right = reslist[k].x2 * ratio_2;
+        float bottom = reslist[k].y2 * ratio_1;
 
-        bottom = reslist[k].x1 * ratio_2;  //x1
-        top = reslist[k].x2 * ratio_2;   //x2
-
-        //LOGI("Coords:: x1:%d :: y1:%d :: x2:%d :: y2:%d",reslist[0].x1,reslist[0].y1,reslist[0].x2,reslist[0].y2);
-        //LOGI("after mul: %f %f %f %f",bottom, left, top, right );
-
-        std::vector<float> singleboxcoords{top, bottom, left, right, milli_time};
+        std::vector<float> singleboxcoords{left, top, right, bottom, milli_time};
         BB_coords.push_back(singleboxcoords);
         BB_names.push_back(reslist[k].objlabel);
     }
