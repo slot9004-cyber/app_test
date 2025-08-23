@@ -238,19 +238,19 @@ void createInputBufferMap(zdl::DlSystem::UserBufferMap& inputMap,
 
 void preprocess_BB(std::vector<float32_t> &dest_buffer, cv::Mat &img)
 {
-    cv::Mat img320;
-    cv::resize(img,img320,cv::Size(320,320),cv::INTER_LINEAR);  //TODO get the size from model itself
+    cv::Mat resized_img;
+    cv::resize(img,resized_img,cv::Size(512,512),cv::INTER_LINEAR);  //TODO get the size from model itself
 
     float inputScale = 0.00392156862745f;    //normalization value, this is 1/255
 
     float * accumulator = reinterpret_cast<float *> (&dest_buffer[0]);
 
     //opencv read in BGRA by default
-    cvtColor(img320, img320, CV_BGRA2BGR);
-    LOGI("num of channels: %d",img320.channels());
-    int lim = img320.rows*img320.cols*3;
+    cvtColor(resized_img, resized_img, CV_BGRA2BGR);
+    LOGI("num of channels: %d",resized_img.channels());
+    int lim = resized_img.rows*resized_img.cols*3;
     for(int idx = 0; idx<lim; idx++)
-        accumulator[idx]= img320.data[idx]*inputScale;
+        accumulator[idx]= resized_img.data[idx]*inputScale;
 
 }
 

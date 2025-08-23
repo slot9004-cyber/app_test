@@ -189,7 +189,7 @@ std::string build_network_BB(const uint8_t * dlc_buffer_BB, const size_t dlc_siz
 
 
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names) {
+bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask) {
 
     LOGI("execute_net_BB");
     ATrace_beginSection("preprocessing");
@@ -207,8 +207,9 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
         return false;
     }
 
-    std::string name_out_boxes = "887";
-    std::string name_out_classes =  "879";
+    // Define output tensor names - these are guesses based on common YOLO output names.
+    std::string output0_name = "output0"; // Shape: 1x116x8400 (boxes, scores, mask coeffs)
+    std::string output1_name = "output1"; // Shape: 1x32x160x160 (mask prototypes)
 
     ATrace_endSection();
     gettimeofday(&start_time, NULL);
@@ -221,64 +222,111 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     seconds = end_time.tv_sec - start_time.tv_sec; //seconds
     useconds = end_time.tv_usec - start_time.tv_usec; //milliseconds
     milli_time = ((seconds) * 1000 + useconds/1000.0);
-    //LOGI("Inference time %f ms", milli_time);
 
-    if(execStatus== true){
-        LOGI("Exec BB status is true");
-    }
-    else{
-        LOGE("Exec BB status is false");
+    if(!execStatus){
+        LOGE("Exec BB status is false: %s", zdl::DlSystem::getLastErrorString());
         mtx.unlock();
         return false;
     }
 
+    // Get output tensors
+    if (applicationOutputBuffers.find(output0_name) == applicationOutputBuffers.end() ||
+        applicationOutputBuffers.find(output1_name) == applicationOutputBuffers.end()) {
+        LOGE("Could not find output tensors with assumed names %s and %s.", output0_name.c_str(), output1_name.c_str());
+        for (auto const& [key, val] : applicationOutputBuffers) {
+            LOGE("Available output tensor: %s", key.c_str());
+        }
+        mtx.unlock();
+        return false;
+    }
+    std::vector<float32_t>& output0_buffer = applicationOutputBuffers.at(output0_name);
+    std::vector<float32_t>& output1_buffer = applicationOutputBuffers.at(output1_name);
 
-    std::vector<float32_t> BBout_boxcoords = applicationOutputBuffers.at(name_out_boxes);
-    std::vector<float32_t> BBout_class = applicationOutputBuffers.at(name_out_classes);
+    // Constants for post-processing
+    const int NUM_PROPOSALS = 8400;
+    const int CHANNELS_PER_PROPOSAL = 116;
+    const int NUM_CLASSES = 80;
+    const int MASK_COEFFS = 32;
+    const int MASK_HEIGHT = 160;
+    const int MASK_WIDTH = 160;
+    const int INPUT_WIDTH = 512;
+    const int INPUT_HEIGHT = 512;
+    const float CONF_THRESHOLD = 0.5f;
+    const float IOU_THRESHOLD = 0.5f;
+    const int PERSON_CLASS_ID = 0;
 
-    std::vector<BoxCornerEncoding> Boxlist;
-    std::vector<std::string> Classlist;
+    // Reshape output0 from flat buffer to 8400x116 for easier processing
+    cv::Mat proposals(CHANNELS_PER_PROPOSAL, NUM_PROPOSALS, CV_32F, output0_buffer.data());
+    cv::Mat proposals_t = proposals.t();
 
-    //Post Processing
-    for(int i =0;i<(2100);i++)  //TODO change value of 2100 to soft value
-    {
-        int start = i*80;
-        int end = (i+1)*80;
+    std::vector<cv::Rect> boxes;
+    std::vector<float> confs;
+    std::vector<cv::Mat> proposal_mask_coeffs;
 
-        auto it = max_element (BBout_class.begin()+start, BBout_class.begin()+end);
-        int index = distance(BBout_class.begin()+start, it);
-        LOGI("it:: %f",*it);
+    float x_factor = (float)orig_width / INPUT_WIDTH;
+    float y_factor = (float)orig_height / INPUT_HEIGHT;
 
-        std::string classname = classnamemapping[index];
-        if(*it>=0.15 && classname == "person")
-        {
-            int x1 = BBout_boxcoords[i * 4 + 0];
-            int y1 = BBout_boxcoords[i * 4 + 1];
-            int x2 = BBout_boxcoords[i * 4 + 2];
-            int y2 = BBout_boxcoords[i * 4 + 3];
-            Boxlist.push_back(BoxCornerEncoding(x1, y1, x2, y2,*it,classname));
+    for (int i = 0; i < NUM_PROPOSALS; ++i) {
+        cv::Mat proposal = proposals_t.row(i);
+        cv::Mat box_coords = proposal.colRange(0, 4);
+        cv::Mat class_scores = proposal.colRange(4, 4 + NUM_CLASSES);
+
+        cv::Point class_id_point;
+        double max_val;
+        cv::minMaxLoc(class_scores, 0, &max_val, 0, &class_id_point);
+
+        if (max_val > CONF_THRESHOLD && class_id_point.x == PERSON_CLASS_ID) {
+            confs.push_back(max_val);
+
+            float cx = box_coords.at<float>(0,0);
+            float cy = box_coords.at<float>(0,1);
+            float w = box_coords.at<float>(0,2);
+            float h = box_coords.at<float>(0,3);
+
+            int left = static_cast<int>((cx - 0.5 * w) * x_factor);
+            int top = static_cast<int>((cy - 0.5 * h) * y_factor);
+            int width = static_cast<int>(w * x_factor);
+            int height = static_cast<int>(h * y_factor);
+
+            boxes.push_back(cv::Rect(left, top, width, height));
+            proposal_mask_coeffs.push_back(proposal.colRange(4 + NUM_CLASSES, CHANNELS_PER_PROPOSAL));
         }
     }
 
-    //LOGI("Boxlist size:: %d",Boxlist.size());
-    std::vector<BoxCornerEncoding> reslist = NonMaxSuppression(Boxlist,0.20);
-    //LOGI("reslist ssize %d", reslist.size());
+    // Perform Non-Maximum Suppression
+    std::vector<int> nms_result;
+    cv::dnn::NMSBoxes(boxes, confs, CONF_THRESHOLD, IOU_THRESHOLD, nms_result);
 
-    numberofobj = reslist.size();
-    float ratio_2 = orig_width/320.0f;
-    float ratio_1 = orig_height/320.0f;
-    //LOGI("ratio1 %f :: ratio_2 %f",ratio_1,ratio_2);
+    numberofobj = nms_result.size();
+    BB_coords.clear();
+    BB_names.clear();
+    combined_mask = cv::Mat::zeros(orig_height, orig_width, CV_8U);
+    cv::Mat proto_masks(MASK_COEFFS, MASK_WIDTH * MASK_HEIGHT, CV_32F, output1_buffer.data());
 
-    for(int k=0;k<numberofobj;k++) {
-        // Standardize coordinate system: left, top, right, bottom
-        float left = reslist[k].x1 * ratio_2;
-        float top = reslist[k].y1 * ratio_1;
-        float right = reslist[k].x2 * ratio_2;
-        float bottom = reslist[k].y2 * ratio_1;
+    for (int idx : nms_result) {
+        cv::Rect box = boxes[idx];
+        BB_coords.push_back({(float)box.x, (float)box.y, (float)(box.x + box.width), (float)(box.y + box.height), milli_time});
+        BB_names.push_back("person");
 
-        std::vector<float> singleboxcoords{left, top, right, bottom, milli_time};
-        BB_coords.push_back(singleboxcoords);
-        BB_names.push_back(reslist[k].objlabel);
+        // Reconstruct mask for the detected object
+        cv::Mat mask_coeffs = proposal_mask_coeffs[idx];
+        cv::Mat matmul_result;
+        cv::gemm(mask_coeffs, proto_masks, 1.0, cv::Mat(), 0.0, matmul_result);
+        cv::Mat final_mask = matmul_result.reshape(1, {MASK_HEIGHT, MASK_WIDTH});
+
+        // Apply sigmoid
+        cv::exp(-final_mask, final_mask);
+        final_mask = 1.0 / (1.0 + final_mask);
+
+        // Binarize the mask
+        cv::Mat binary_mask = final_mask > 0.5;
+
+        // Upscale the binary mask to original image size
+        cv::Mat upscaled_mask;
+        cv::resize(binary_mask, upscaled_mask, cv::Size(orig_width, orig_height), 0, 0, cv::INTER_NEAREST);
+
+        // Combine with the main mask using bitwise OR
+        combined_mask |= upscaled_mask;
     }
 
     ATrace_endSection();

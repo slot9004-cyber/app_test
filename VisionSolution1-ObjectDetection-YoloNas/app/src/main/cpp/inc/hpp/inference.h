@@ -64,6 +64,8 @@ public:
 std::string build_network_BB(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg);
 bool SetAdspLibraryPath(std::string nativeLibPath);
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names);
+#include <opencv2/core/mat.hpp>
+
+bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask);
 
 #endif //NATIVEINFERENCE_INFERENCE_H

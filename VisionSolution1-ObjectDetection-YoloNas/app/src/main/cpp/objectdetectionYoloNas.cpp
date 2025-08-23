@@ -4,6 +4,7 @@
 //============================================================================
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/mat.hpp>
 using namespace cv;
 #include <jni.h>
 #include <string>
@@ -89,7 +90,7 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_initSNPE(JNIEnv *env, jobject thiz
     std::string result;
 
     AAssetManager* mgr = AAssetManager_fromJava(env, asset_manager);
-    AAsset* asset_BB = AAssetManager_open(mgr, "yolo_nas_s.dlc", AASSET_MODE_UNKNOWN);
+    AAsset* asset_BB = AAssetManager_open(mgr, "yolo11s-seg.dlc", AASSET_MODE_UNKNOWN);
     if (NULL == asset_BB) {
         LOGE("Failed to load ASSET, needed to load DLC\n");
         result = "Failed to load ASSET, needed to load DLC\n";
@@ -122,8 +123,9 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
     int numberofobj = 0;
     std::vector<std::vector<float>> BB_coords;
     std::vector<std::string> BB_names;
+    cv::Mat combined_mask;
 
-    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names);
+    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names, combined_mask);
 
     if(numberofobj ==0)
         {
