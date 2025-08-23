@@ -250,7 +250,7 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
         LOGI("it:: %f",*it);
 
         std::string classname = classnamemapping[index];
-        if(*it>=0.15 )
+        if(*it>=0.15 && classname == "person")
         {
             int x1 = BBout_boxcoords[i * 4 + 0];
             int y1 = BBout_boxcoords[i * 4 + 1];

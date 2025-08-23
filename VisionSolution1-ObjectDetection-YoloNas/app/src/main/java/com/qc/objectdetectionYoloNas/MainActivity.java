@@ -18,7 +18,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // TODO: 預設值可依需求調整（C/G/D/N）
-    public static char runtime_var = 'N';
+    public static char runtime_var = 'D';
 
     private static final int REQ_CAMERA = 1;
 

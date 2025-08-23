@@ -31,8 +31,7 @@
             android:id="@+id/CPU"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="CPU"
-            android:checked="true"/>
+                android:text="CPU" />
 
         <RadioButton
             android:id="@+id/GPU"
@@ -43,7 +42,8 @@
             android:id="@+id/DSP"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="DSP" />
+                android:text="DSP"
+                android:checked="true"/>
     </RadioGroup>
 
     <FrameLayout
