@@ -489,7 +489,10 @@ public class CameraFragment extends Fragment {
                 if (frame_count == 0) tic = System.currentTimeMillis();
                 else {
                     tic2 = System.currentTimeMillis();
-                    fps = (int) (1000 / (tic2 - tic));
+                    long duration = tic2 - tic;
+                    if (duration > 0) {
+                        fps = (int) (1000 / duration);
+                    }
                     tic = System.currentTimeMillis();
                 }
             } catch (Exception e) { e.printStackTrace(); }

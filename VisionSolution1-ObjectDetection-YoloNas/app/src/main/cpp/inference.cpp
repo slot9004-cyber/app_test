@@ -249,6 +249,7 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
     float ratio_w = (float)orig_width / input_width;
     float ratio_h = (float)orig_height / input_height;
 
+    /*
     for (int idx : indices) {
         if (class_ids[idx] != 0) continue; // Only process "person" class
 
@@ -305,6 +306,7 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
             }
         }
     }
+    */
 
     if (g_enable_debug) {
         // Save pre-processed input
