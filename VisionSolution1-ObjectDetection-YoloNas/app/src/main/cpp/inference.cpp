@@ -68,30 +68,45 @@ std::map<int, std::string> classnamemapping =
                  77, "teddy"},{ 78, "hair"},{ 79, "toothbrush"}
         };
 
-inline float ComputeIntersectionOverUnion(const BoxCornerEncoding &box_i,const BoxCornerEncoding &box_j)
-{
-    const float box_i_y_min = std::min<float>(box_i.y1, box_i.y2);
-    const float box_i_y_max = std::max<float>(box_i.y1, box_i.y2);
-    const float box_i_x_min = std::min<float>(box_i.x1, box_i.x2);
-    const float box_i_x_max = std::max<float>(box_i.x1, box_i.x2);
-    const float box_j_y_min = std::min<float>(box_j.y1, box_j.y2);
-    const float box_j_y_max = std::max<float>(box_j.y1, box_j.y2);
-    const float box_j_x_min = std::min<float>(box_j.x1, box_j.x2);
-    const float box_j_x_max = std::max<float>(box_j.x1, box_j.x2);
+inline float IoU(const cv::Rect& box_a, const cv::Rect& box_b) {
+    float xA = std::max(box_a.tl().x, box_b.tl().x);
+    float yA = std::max(box_a.tl().y, box_b.tl().y);
+    float xB = std::min(box_a.br().x, box_b.br().x);
+    float yB = std::min(box_a.br().y, box_b.br().y);
+    float interArea = std::max(0.0f, xB - xA) * std::max(0.0f, yB - yA);
+    float boxAArea = box_a.width * box_a.height;
+    float boxBArea = box_b.width * box_b.height;
+    return interArea / (boxAArea + boxBArea - interArea);
+}
 
-    const float area_i =
-            (box_i_y_max - box_i_y_min) * (box_i_x_max - box_i_x_min);
-    const float area_j =
-            (box_j_y_max - box_j_y_min) * (box_j_x_max - box_j_x_min);
-    if (area_i <= 0 || area_j <= 0) return 0.0;
-    const float intersection_ymax = std::min<float>(box_i_y_max, box_j_y_max);
-    const float intersection_xmax = std::min<float>(box_i_x_max, box_j_x_max);
-    const float intersection_ymin = std::max<float>(box_i_y_min, box_j_y_min);
-    const float intersection_xmin = std::max<float>(box_i_x_min, box_j_x_min);
-    const float intersection_area =
-            std::max<float>(intersection_ymax - intersection_ymin, 0.0) *
-            std::max<float>(intersection_xmax - intersection_xmin, 0.0);
-    return intersection_area / (area_i + area_j - intersection_area);
+std::vector<int> manualNMS(std::vector<cv::Rect>& boxes, std::vector<float>& confidences, float confThreshold, float iouThreshold) {
+    std::vector<int> indices;
+    for (size_t i = 0; i < confidences.size(); ++i) {
+        indices.push_back(i);
+    }
+
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        return confidences[a] > confidences[b];
+    });
+
+    std::vector<int> keep;
+    std::vector<bool> suppressed(indices.size(), false);
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+        if (suppressed[i]) {
+            continue;
+        }
+        keep.push_back(indices[i]);
+        for (size_t j = i + 1; j < indices.size(); ++j) {
+            if (suppressed[j]) {
+                continue;
+            }
+            if (IoU(boxes[indices[i]], boxes[indices[j]]) > iouThreshold) {
+                suppressed[j] = true;
+            }
+        }
+    }
+    return keep;
 }
 
 
@@ -242,8 +257,7 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
 
     LOGI("Found %zu boxes above confidence threshold", boxes.size());
 
-    std::vector<int> indices;
-    cv::dnn::NMSBoxes(boxes, confidences, conf_threshold, iou_threshold, indices);
+    std::vector<int> indices = manualNMS(boxes, confidences, conf_threshold, iou_threshold);
 
     numberofobj = indices.size();
     if (numberofobj == 0) {
