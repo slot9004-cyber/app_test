@@ -10,7 +10,6 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgproc/types_c.h>
 #include "android/log.h"
-#include <cstring>
 
 #include "zdl/SNPE/SNPE.hpp"
 #include "zdl/SNPE/SNPEFactory.hpp"
@@ -242,13 +241,14 @@ void preprocess_segmentation(std::vector<float32_t> &dest_buffer, cv::Mat &img)
     cv::Mat img640;
     cv::resize(img,img640,cv::Size(640,640),cv::INTER_LINEAR);
 
+    float * accumulator = reinterpret_cast<float *> (&dest_buffer[0]);
+
     //opencv read in BGRA by default
     cvtColor(img640, img640, CV_BGRA2BGR);
 
-    cv::Mat float_mat;
-    img640.convertTo(float_mat, CV_32FC3, 1.0/127.5, -1.0);
-
-    memcpy(dest_buffer.data(), float_mat.data, float_mat.total() * float_mat.elemSize());
+    int lim = img640.rows*img640.cols*3;
+    for(int idx = 0; idx<lim; idx++)
+        accumulator[idx]= (img640.data[idx] / 127.5f) - 1.0f;
 }
 
 
