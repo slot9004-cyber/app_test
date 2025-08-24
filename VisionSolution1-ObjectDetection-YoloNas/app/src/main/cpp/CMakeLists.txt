@@ -62,4 +62,6 @@ target_link_libraries( # Specifies the target library.
                        # included in the NDK.
                 ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/arm64-v8a/libSNPE.so
 
-                       ${log-lib} ${OpenCV_LIBS})
+                       ${log-lib}
+                       jnigraphics
+                       ${OpenCV_LIBS})
