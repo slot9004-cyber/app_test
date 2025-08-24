@@ -89,7 +89,7 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_initSNPE(JNIEnv *env, jobject thiz
     std::string result;
 
     AAssetManager* mgr = AAssetManager_fromJava(env, asset_manager);
-    AAsset* asset_BB = AAssetManager_open(mgr, "yolo_nas_s.dlc", AASSET_MODE_UNKNOWN);
+    AAsset* asset_BB = AAssetManager_open(mgr, "yolo11s-seg.dlc", AASSET_MODE_UNKNOWN);
     if (NULL == asset_BB) {
         LOGE("Failed to load ASSET, needed to load DLC\n");
         result = "Failed to load ASSET, needed to load DLC\n";
@@ -103,7 +103,7 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_initSNPE(JNIEnv *env, jobject thiz
     AAsset_read(asset_BB, dlc_buffer_BB, dlc_size_BB);
 
     result += "\n\nBuilding Models DLC Network:\n";
-    result += build_network_BB(reinterpret_cast<const uint8_t *>(dlc_buffer_BB), dlc_size_BB,runtime);
+    result += build_network_segmentation(reinterpret_cast<const uint8_t *>(dlc_buffer_BB), dlc_size_BB,runtime);
 
     return env->NewStringUTF(result.c_str());
 }
@@ -123,7 +123,7 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
     std::vector<std::vector<float>> BB_coords;
     std::vector<std::string> BB_names;
 
-    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names);
+    bool status = execute_segmentation(img,actual_width, actual_height, numberofobj, BB_coords, BB_names);
 
     if(numberofobj ==0)
         {
@@ -152,4 +152,10 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
     //LOGD("infer SNPE E");
     return numberofobj;
 
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_qc_objectdetectionYoloNas_SNPEHelper_enableDebug(JNIEnv *env, jobject thiz, jboolean enable) {
+    g_enable_debug = enable;
 }

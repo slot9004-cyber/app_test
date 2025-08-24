@@ -27,6 +27,7 @@
 #include <opencv2/core/types_c.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgproc/types_c.h>
+#include <opencv2/dnn.hpp>
 
 std::unique_ptr<zdl::SNPE::SNPE> snpe_HRNET;
 std::unique_ptr<zdl::SNPE::SNPE> snpe_BB;
@@ -36,6 +37,7 @@ static zdl::DlSystem::Runtime_t runtime = zdl::DlSystem::Runtime_t::CPU;
 static zdl::DlSystem::RuntimeList runtimeList;
 bool useUserSuppliedBuffers = true;
 bool useIntBuffer = false;
+bool g_enable_debug = false;
 
 zdl::DlSystem::UserBufferMap inputMap, outputMap;
 std::vector <std::unique_ptr<zdl::DlSystem::IUserBuffer>> snpeUserBackedInputBuffers, snpeUserBackedOutputBuffers;
@@ -91,46 +93,8 @@ inline float ComputeIntersectionOverUnion(const BoxCornerEncoding &box_i,const B
     return intersection_area / (area_i + area_j - intersection_area);
 }
 
-std::vector<BoxCornerEncoding> NonMaxSuppression(std::vector<BoxCornerEncoding> boxes,
-                           const float iou_threshold)
-{
 
-    if (boxes.size()==0) {
-        return boxes;
-    }
-
-    std::sort(boxes.begin(), boxes.end(), [] (const BoxCornerEncoding& left, const BoxCornerEncoding& right) {
-        if (left.score > right.score) {
-            return true;
-        } else {
-            return false;
-        }
-    });
-
-
-    std::vector<bool> flag(boxes.size(), false);
-    for (unsigned int i = 0; i < boxes.size(); i++) {
-        if (flag[i]) {
-            continue;
-        }
-
-        for (unsigned int j = i + 1; j < boxes.size(); j++) {
-            if (ComputeIntersectionOverUnion(boxes[i],boxes[j]) > iou_threshold) {
-                flag[j] = true;
-            }
-        }
-    }
-
-    std::vector<BoxCornerEncoding> ret;
-    for (unsigned int i = 0; i < boxes.size(); i++) {
-        if (!flag[i])
-            ret.push_back(boxes[i]);
-    }
-
-    return ret;
-}
-
-std::string build_network_BB(const uint8_t * dlc_buffer_BB, const size_t dlc_size_BB, const char runtime_arg)
+std::string build_network_segmentation(const uint8_t * dlc_buffer_BB, const size_t dlc_size_BB, const char runtime_arg)
 {
     std::string outputLogger;
     bool usingInitCaching = false;  //shubham: TODO check with true
@@ -189,9 +153,9 @@ std::string build_network_BB(const uint8_t * dlc_buffer_BB, const size_t dlc_siz
 
 
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names) {
+bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names) {
 
-    LOGI("execute_net_BB");
+    LOGI("execute_segmentation");
     ATrace_beginSection("preprocessing");
 
     struct timeval start_time, end_time;
@@ -200,15 +164,15 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     mtx.lock();
     assert(snpe_BB!=nullptr);
 
-    if(!loadInputUserBuffer_BB(applicationInputBuffers, snpe_BB, img, inputMap, bitWidth))
+    if(!loadInputUserBuffer_segmentation(applicationInputBuffers, snpe_BB, img, inputMap, bitWidth))
     {
         LOGE("Failed to load Input UserBuffer");
         mtx.unlock();
         return false;
     }
 
-    std::string name_out_boxes = "887";
-    std::string name_out_classes =  "879";
+    std::string output0_name = "output0";
+    std::string output1_name = "output1";
 
     ATrace_endSection();
     gettimeofday(&start_time, NULL);
@@ -221,64 +185,138 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     seconds = end_time.tv_sec - start_time.tv_sec; //seconds
     useconds = end_time.tv_usec - start_time.tv_usec; //milliseconds
     milli_time = ((seconds) * 1000 + useconds/1000.0);
-    //LOGI("Inference time %f ms", milli_time);
 
-    if(execStatus== true){
-        LOGI("Exec BB status is true");
-    }
-    else{
-        LOGE("Exec BB status is false");
+    if(!execStatus){
+        LOGE("Exec status is false");
         mtx.unlock();
         return false;
     }
 
+    const auto& output0_buf = applicationOutputBuffers.at(output0_name);
+    const auto& output1_buf = applicationOutputBuffers.at(output1_name);
 
-    std::vector<float32_t> BBout_boxcoords = applicationOutputBuffers.at(name_out_boxes);
-    std::vector<float32_t> BBout_class = applicationOutputBuffers.at(name_out_classes);
+    const int num_proposals = 8400;
+    const int num_classes = 80;
+    const int num_mask_coeffs = 32;
+    const int input_width = 640;
+    const int input_height = 640;
+    const int mask_width = 160;
+    const int mask_height = 160;
+    const float conf_threshold = 0.25f;
+    const float iou_threshold = 0.45f;
+    const int proposal_size = 4 + num_classes + num_mask_coeffs; // 116
 
-    std::vector<BoxCornerEncoding> Boxlist;
-    std::vector<std::string> Classlist;
-
-    //Post Processing
-    for(int i =0;i<(2100);i++)  //TODO change value of 2100 to soft value
-    {
-        int start = i*80;
-        int end = (i+1)*80;
-
-        auto it = max_element (BBout_class.begin()+start, BBout_class.begin()+end);
-        int index = distance(BBout_class.begin()+start, it);
-        LOGI("it:: %f",*it);
-
-        std::string classname = classnamemapping[index];
-        if(*it>=0.15 && classname == "person")
-        {
-            int x1 = BBout_boxcoords[i * 4 + 0];
-            int y1 = BBout_boxcoords[i * 4 + 1];
-            int x2 = BBout_boxcoords[i * 4 + 2];
-            int y2 = BBout_boxcoords[i * 4 + 3];
-            Boxlist.push_back(BoxCornerEncoding(x1, y1, x2, y2,*it,classname));
+    std::vector<float> output0_transposed(num_proposals * proposal_size);
+    for (int i = 0; i < num_proposals; ++i) {
+        for (int j = 0; j < proposal_size; ++j) {
+            output0_transposed[i * proposal_size + j] = output0_buf[j * num_proposals + i];
         }
     }
 
-    //LOGI("Boxlist size:: %d",Boxlist.size());
-    std::vector<BoxCornerEncoding> reslist = NonMaxSuppression(Boxlist,0.20);
-    //LOGI("reslist ssize %d", reslist.size());
+    std::vector<cv::Rect> boxes;
+    std::vector<float> confidences;
+    std::vector<int> class_ids;
+    std::vector<std::vector<float>> mask_coeffs_vec;
 
-    numberofobj = reslist.size();
-    float ratio_2 = orig_width/320.0f;
-    float ratio_1 = orig_height/320.0f;
-    //LOGI("ratio1 %f :: ratio_2 %f",ratio_1,ratio_2);
+    for (int i = 0; i < num_proposals; ++i) {
+        float* proposal = output0_transposed.data() + i * proposal_size;
+        float* class_scores = proposal + 4;
+        auto max_it = std::max_element(class_scores, class_scores + num_classes);
+        float confidence = *max_it;
+        int class_id = std::distance(class_scores, max_it);
 
-    for(int k=0;k<numberofobj;k++) {
-        // Standardize coordinate system: left, top, right, bottom
-        float left = reslist[k].x1 * ratio_2;
-        float top = reslist[k].y1 * ratio_1;
-        float right = reslist[k].x2 * ratio_2;
-        float bottom = reslist[k].y2 * ratio_1;
+        if (confidence > conf_threshold) {
+            float cx = proposal[0];
+            float cy = proposal[1];
+            float w = proposal[2];
+            float h = proposal[3];
+            boxes.emplace_back(cx - w / 2, cy - h / 2, w, h);
+            confidences.push_back(confidence);
+            class_ids.push_back(class_id);
+            mask_coeffs_vec.emplace_back(proposal + 4 + num_classes, proposal + proposal_size);
+        }
+    }
 
-        std::vector<float> singleboxcoords{left, top, right, bottom, milli_time};
+    std::vector<int> indices;
+    cv::dnn::NMSBoxes(boxes, confidences, conf_threshold, iou_threshold, indices);
+
+    numberofobj = indices.size();
+    if (numberofobj == 0) {
+        mtx.unlock();
+        return true;
+    }
+
+    float ratio_w = (float)orig_width / input_width;
+    float ratio_h = (float)orig_height / input_height;
+
+    for (int idx : indices) {
+        cv::Rect box = boxes[idx];
+        std::vector<float> singleboxcoords{box.x * ratio_w, box.y * ratio_h, (box.x + box.width) * ratio_w, (box.y + box.height) * ratio_h, milli_time};
         BB_coords.push_back(singleboxcoords);
-        BB_names.push_back(reslist[k].objlabel);
+        BB_names.push_back(classnamemapping[class_ids[idx]]);
+
+        cv::Mat mat_coeffs(1, num_mask_coeffs, CV_32F, mask_coeffs_vec[idx].data());
+        cv::Mat mat_prototypes(num_mask_coeffs, mask_width * mask_height, CV_32F, (float*)output1_buf.data());
+        cv::Mat mat_mul = mat_coeffs * mat_prototypes;
+
+        cv::Mat mask_mat(mask_height, mask_width, CV_32F, mat_mul.data);
+        cv::exp(-mask_mat, mask_mat);
+        mask_mat = 1.0f / (1.0f + mask_mat);
+
+        cv::Rect box_in_640 = boxes[idx];
+        int x_in_160 = round(box_in_640.x / 4.0);
+        int y_in_160 = round(box_in_640.y / 4.0);
+        int w_in_160 = round(box_in_640.width / 4.0);
+        int h_in_160 = round(box_in_640.height / 4.0);
+
+        x_in_160 = std::max(0, x_in_160);
+        y_in_160 = std::max(0, y_in_160);
+        w_in_160 = std::min(mask_width - x_in_160, w_in_160);
+        h_in_160 = std::min(mask_height - y_in_160, h_in_160);
+
+        cv::Mat cropped_mask;
+        if (w_in_160 > 0 && h_in_160 > 0) {
+            cropped_mask = mask_mat(cv::Rect(x_in_160, y_in_160, w_in_160, h_in_160));
+        } else {
+            continue;
+        }
+
+        cv::Rect final_box(singleboxcoords[0], singleboxcoords[1], singleboxcoords[2]-singleboxcoords[0], singleboxcoords[3]-singleboxcoords[1]);
+        if (final_box.width <= 0 || final_box.height <= 0 || final_box.x < 0 || final_box.y < 0 || final_box.x + final_box.width > img.cols || final_box.y + final_box.height > img.rows) continue;
+
+        cv::Mat resized_mask;
+        cv::resize(cropped_mask, resized_mask, final_box.size());
+
+        cv::Mat binary_mask = resized_mask > 0.5;
+
+        cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
+        cv::Mat roi = img(final_box);
+
+        for(int r=0; r<final_box.height; ++r) {
+            for(int c=0; c<final_box.width; ++c) {
+                if(binary_mask.at<uchar>(r,c) > 0) {
+                    cv::Vec4b& pixel = roi.at<cv::Vec4b>(r,c);
+                    pixel[0] = cv::saturate_cast<uchar>(pixel[0] * 0.5 + color[0] * 0.5); // B
+                    pixel[1] = cv::saturate_cast<uchar>(pixel[1] * 0.5 + color[1] * 0.5); // G
+                    pixel[2] = cv::saturate_cast<uchar>(pixel[2] * 0.5 + color[2] * 0.5); // R
+                }
+            }
+        }
+        cv::rectangle(img, final_box, cv::Scalar(0, 255, 0, 255), 2);
+    }
+
+    if (g_enable_debug) {
+        // Save pre-processed input
+        const auto& inputNamesOpt = snpe_BB->getInputTensorNames();
+        const zdl::DlSystem::StringList& inputNames = *inputNamesOpt;
+        std::vector<float>& inputBuffer = applicationInputBuffers.at(inputNames.at(0));
+        cv::Mat preprocessed_img(input_height, input_width, CV_32FC3, inputBuffer.data());
+        cv::Mat preprocessed_img_8u;
+        preprocessed_img.convertTo(preprocessed_img_8u, CV_8UC3, 127.5, 127.5);
+        cv::imwrite("/storage/emulated/0/Download/preprocessed_input.png", preprocessed_img_8u);
+
+        // Save output image
+        cv::imwrite("/storage/emulated/0/Download/segmentation_output.png", img);
     }
 
     ATrace_endSection();

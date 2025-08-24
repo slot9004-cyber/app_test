@@ -29,6 +29,7 @@ public class SNPEHelper {
     public native String queryRuntimes(String a);
     public native String initSNPE(AssetManager assetManager, char a);
     public native int inferSNPE(long inputmataddress, int width,int height, float[][]boxcoords, String[] classname);
+    public static native void enableDebug(boolean enable);
 
 
     /**

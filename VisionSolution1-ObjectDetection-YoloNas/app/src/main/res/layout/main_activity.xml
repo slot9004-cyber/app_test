@@ -19,37 +19,51 @@
         android:text="Select run time"
         android:textSize="18dp" />
 
-    <RadioGroup
-        android:id="@+id/rg1"
+    <LinearLayout
+        android:id="@+id/controls_layout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_below="@id/tv1"
         android:layout_centerHorizontal="true"
-        android:orientation="horizontal">
+        android:orientation="vertical">
 
-        <RadioButton
-            android:id="@+id/CPU"
+        <RadioGroup
+            android:id="@+id/rg1"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/CPU"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:text="CPU" />
 
-        <RadioButton
-            android:id="@+id/GPU"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="GPU" />
-        <RadioButton
-            android:id="@+id/DSP"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            <RadioButton
+                android:id="@+id/GPU"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="GPU" />
+            <RadioButton
+                android:id="@+id/DSP"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:text="DSP"
                 android:checked="true"/>
-    </RadioGroup>
+        </RadioGroup>
+
+        <Switch
+            android:id="@+id/debug_switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="Enable Debugging" />
+    </LinearLayout>
 
     <FrameLayout
         android:id="@+id/main_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/rg1"/>
+        android:layout_below="@id/controls_layout"/>
 
 </RelativeLayout>

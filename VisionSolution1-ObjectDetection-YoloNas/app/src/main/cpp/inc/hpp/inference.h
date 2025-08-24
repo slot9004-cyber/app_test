@@ -40,6 +40,8 @@
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 
+extern bool g_enable_debug;
+
 class BoxCornerEncoding {
 
 public:
@@ -61,9 +63,9 @@ public:
     }
 };
 
-std::string build_network_BB(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg);
+std::string build_network_segmentation(const uint8_t * dlc_buffer, const size_t dlc_size, const char runtime_arg);
 bool SetAdspLibraryPath(std::string nativeLibPath);
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names);
+bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &numberofhuman, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names);
 
 #endif //NATIVEINFERENCE_INFERENCE_H

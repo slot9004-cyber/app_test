@@ -236,27 +236,25 @@ void createInputBufferMap(zdl::DlSystem::UserBufferMap& inputMap,
     }
 }
 
-void preprocess_BB(std::vector<float32_t> &dest_buffer, cv::Mat &img)
+void preprocess_segmentation(std::vector<float32_t> &dest_buffer, cv::Mat &img)
 {
-    cv::Mat img320;
-    cv::resize(img,img320,cv::Size(320,320),cv::INTER_LINEAR);  //TODO get the size from model itself
-
-    float inputScale = 0.00392156862745f;    //normalization value, this is 1/255
+    cv::Mat img640;
+    cv::resize(img,img640,cv::Size(640,640),cv::INTER_LINEAR);
 
     float * accumulator = reinterpret_cast<float *> (&dest_buffer[0]);
 
     //opencv read in BGRA by default
-    cvtColor(img320, img320, CV_BGRA2BGR);
-    LOGI("num of channels: %d",img320.channels());
-    int lim = img320.rows*img320.cols*3;
+    cvtColor(img640, img640, CV_BGRA2BGR);
+    LOGI("num of channels: %d",img640.channels());
+    int lim = img640.rows*img640.cols*3;
     for(int idx = 0; idx<lim; idx++)
-        accumulator[idx]= img320.data[idx]*inputScale;
+        accumulator[idx]= (img640.data[idx] / 127.5f) - 1.0f;
 
 }
 
 
 //Preprocessing and loading in application Input Buffer for BB
-bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
+bool loadInputUserBuffer_segmentation(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
                             std::unique_ptr<zdl::SNPE::SNPE>& snpe,
                             cv::Mat &img,
                             zdl::DlSystem::UserBufferMap& inputMap,
@@ -268,7 +266,7 @@ bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_
     const zdl::DlSystem::StringList &inputNames = *inputNamesOpt;
     assert(inputNames.size() > 0);
 
-    if (inputNames.size()) LOGI("Preprocessing and loading in application Input Buffer for BB");
+    if (inputNames.size()) LOGI("Preprocessing and loading in application Input Buffer for Segmentation");
 
 
     for (size_t j = 0; j < inputNames.size(); j++) {
@@ -280,7 +278,7 @@ bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_
             return false;
         } else {
 
-            preprocess_BB(applicationBuffers.at(name),img);  //functions loads data in applicationBuffer
+            preprocess_segmentation(applicationBuffers.at(name),img);  //functions loads data in applicationBuffer
 
         }
     }

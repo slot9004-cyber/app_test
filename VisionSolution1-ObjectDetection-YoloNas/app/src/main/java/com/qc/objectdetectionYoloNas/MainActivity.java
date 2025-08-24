@@ -8,6 +8,8 @@ import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AppCompatActivity;
 import android.view.WindowManager;
 import android.widget.RadioGroup;
+import android.widget.Switch;
+import android.widget.CompoundButton;
 
 import org.opencv.android.OpenCVLoader;
 
@@ -20,9 +22,10 @@ public class MainActivity extends AppCompatActivity {
     // TODO: 預設值可依需求調整（C/G/D/N）
     public static char runtime_var = 'D';
 
-    private static final int REQ_CAMERA = 1;
+    private static final int REQ_PERMISSIONS = 1;
 
     private RadioGroup rg;
+    private Switch debugSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,14 +60,22 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+
+        debugSwitch = (Switch) findViewById(R.id.debug_switch);
+        debugSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                SNPEHelper.enableDebug(isChecked);
+            }
+        });
     }
 
     /**
-     * Method to request Camera permission
+     * Method to request Camera and Storage permission
      */
-    private void cameraPermission() {
+    private void requestPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
+            requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_PERMISSIONS);
         }
     }
 
@@ -75,7 +86,8 @@ public class MainActivity extends AppCompatActivity {
         boolean passToFragment;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            passToFragment = (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED);
+            passToFragment = (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) &&
+                             (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED);
         } else {
             passToFragment = true;
         }
@@ -87,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
             transaction.replace(R.id.main_content, CameraFragment.create(args));
             transaction.commit();
         } else {
-            cameraPermission();
+            requestPermissions();
         }
     }
 
@@ -103,10 +115,9 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
     }
 
-    // 如需處理權限回調，加入以下方法
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == REQ_CAMERA) {
+        if (requestCode == REQ_PERMISSIONS) {
             boolean granted = true;
             if (grantResults == null || grantResults.length == 0) {
                 granted = false;
