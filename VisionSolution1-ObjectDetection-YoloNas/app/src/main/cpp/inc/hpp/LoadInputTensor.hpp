@@ -17,13 +17,7 @@
 #include "DlSystem/ITensorFactory.hpp"
 #include "DlSystem/TensorMap.hpp"
 
-bool loadInputUserBuffer_pose(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
-                         std::unique_ptr<zdl::SNPE::SNPE>& snpe,
-                         const cv::Mat &model_input,
-                         zdl::DlSystem::UserBufferMap& inputMap,
-                         int bitWidth, double center[], double scale[], const float &top, const float &bottom, const float &left, const float &right);
-
-bool loadInputUserBuffer_BB(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
+bool loadInputUserBuffer_segmentation(std::unordered_map<std::string, std::vector<float32_t>>& applicationBuffers,
                          std::unique_ptr<zdl::SNPE::SNPE>& snpe,
                          cv::Mat &model_input,
                          zdl::DlSystem::UserBufferMap& inputMap,

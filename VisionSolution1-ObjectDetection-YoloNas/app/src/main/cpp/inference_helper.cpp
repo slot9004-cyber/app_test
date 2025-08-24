@@ -163,7 +163,7 @@ void createUserBuffer(zdl::DlSystem::UserBufferMap& userBufferMap,
     for(int i=0;i<num_dims;i++)
         bufSize*=bufferShape[i];
 
-    LOGI("\n BufferName: %s Bufsize: %d", name, bufSize);
+    LOGI("\n BufferName: %s Bufsize: %zu", name, bufSize);
 
     // set the buffer encoding type
     std::unique_ptr<zdl::DlSystem::UserBufferEncoding> userBufferEncoding;
