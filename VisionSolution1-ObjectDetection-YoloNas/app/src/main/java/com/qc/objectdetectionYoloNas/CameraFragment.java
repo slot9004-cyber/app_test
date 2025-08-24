@@ -511,17 +511,28 @@ public class CameraFragment extends Fragment {
                         Bitmap maskBitmap = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
                         Utils.matToBitmap(returnedMask, maskBitmap);
 
-                        // To make the mask white as requested
+                        // Create a new bitmap to draw the white mask, preserving transparency
                         Bitmap whiteMaskBitmap = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
                         Canvas canvas = new Canvas(whiteMaskBitmap);
-                        canvas.drawColor(Color.TRANSPARENT); // transparent background
-                        Paint paint = new Paint();
-                        paint.setColorFilter(new android.graphics.PorterDuffColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN));
-                        canvas.drawBitmap(maskBitmap, 0, 0, paint);
-
+                        // Find all non-transparent pixels in the mask and draw them as white
+                        Paint whitePaint = new Paint();
+                        whitePaint.setColor(Color.WHITE);
+                        // This is a simple way to create a white version of the mask.
+                        // A more efficient way might involve shaders or RenderScript, but this is clear.
+                        canvas.drawBitmap(maskBitmap, 0, 0, whitePaint);
 
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> maskedPreviewOverlay.setImageBitmap(whiteMaskBitmap));
+                            getActivity().runOnUiThread(() -> {
+                                // We need another bitmap operation to make the black parts transparent
+                                // This is getting complex, let's simplify. The C++ mask is already 0 or 255.
+                                // We just need to show the white parts. Let's use a color filter.
+                                Bitmap finalWhiteMask = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+                                Canvas finalCanvas = new Canvas(finalWhiteMask);
+                                Paint paint = new Paint();
+                                paint.setColorFilter(new android.graphics.PorterDuffColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN));
+                                finalCanvas.drawBitmap(maskBitmap, 0, 0, paint);
+                                maskedPreviewOverlay.setImageBitmap(finalWhiteMask);
+                            });
                         }
                     }
                 }

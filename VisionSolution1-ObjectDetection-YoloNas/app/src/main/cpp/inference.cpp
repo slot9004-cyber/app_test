@@ -210,9 +210,8 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
         return false;
     }
 
-    // Define output tensor names - these are guesses based on common YOLO output names.
-    std::string output0_name = "output0"; // Shape: 1x116x8400 (boxes, scores, mask coeffs)
-    std::string output1_name = "output1"; // Shape: 1x32x160x160 (mask prototypes)
+    std::string output0_name = "output0";
+    std::string output1_name = "output1";
 
     ATrace_endSection();
     gettimeofday(&start_time, NULL);
@@ -222,8 +221,8 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     ATrace_endSection();
     ATrace_beginSection("postprocessing time");
     gettimeofday(&end_time, NULL);
-    seconds = end_time.tv_sec - start_time.tv_sec; //seconds
-    useconds = end_time.tv_usec - start_time.tv_usec; //milliseconds
+    seconds = end_time.tv_sec - start_time.tv_sec;
+    useconds = end_time.tv_usec - start_time.tv_usec;
     milli_time = ((seconds) * 1000 + useconds/1000.0);
 
     if(!execStatus){
@@ -232,20 +231,15 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
         return false;
     }
 
-    // Get output tensors
     if (applicationOutputBuffers.find(output0_name) == applicationOutputBuffers.end() ||
         applicationOutputBuffers.find(output1_name) == applicationOutputBuffers.end()) {
         LOGE("Could not find output tensors with assumed names %s and %s.", output0_name.c_str(), output1_name.c_str());
-        for (auto const& [key, val] : applicationOutputBuffers) {
-            LOGE("Available output tensor: %s", key.c_str());
-        }
         mtx.unlock();
         return false;
     }
     std::vector<float32_t>& output0_buffer = applicationOutputBuffers.at(output0_name);
     std::vector<float32_t>& output1_buffer = applicationOutputBuffers.at(output1_name);
 
-    // Constants for post-processing
     const int NUM_PROPOSALS = 8400;
     const int CHANNELS_PER_PROPOSAL = 116;
     const int NUM_CLASSES = 80;
@@ -301,10 +295,8 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
     combined_mask = cv::Mat::zeros(orig_height, orig_width, CV_8U);
     cv::Mat proto_masks(MASK_COEFFS, MASK_WIDTH * MASK_HEIGHT, CV_32F, output1_buffer.data());
 
-    // Get the scaled and padded dimensions from padding_info to reuse
     int scaled_width = static_cast<int>(orig_width * padding_info.scale);
     int scaled_height = static_cast<int>(orig_height * padding_info.scale);
-
 
     for (int idx : nms_result) {
         cv::Rect box = boxes[idx];
@@ -320,7 +312,6 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
         final_mask = 1.0 / (1.0 + final_mask);
         cv::Mat binary_mask = final_mask > 0.5;
 
-        // Remove padding from mask and resize to original image dimensions
         cv::Mat resized_mask_padded;
         cv::resize(binary_mask, resized_mask_padded, cv::Size(INPUT_WIDTH, INPUT_HEIGHT));
         cv::Rect crop_rect(padding_info.pad_x, padding_info.pad_y, scaled_width, scaled_height);
