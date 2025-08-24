@@ -4,7 +4,6 @@
 //============================================================================
 
 #include <opencv2/core.hpp>
-#include <opencv2/core/mat.hpp>
 using namespace cv;
 #include <jni.h>
 #include <string>
@@ -114,7 +113,7 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_initSNPE(JNIEnv *env, jobject thiz
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thiz, jlong inputMat, jint actual_width, jint actual_height,
-                                               jobjectArray jboxcoords, jobjectArray objnames, jlong outputmaskaddress, jboolean generate_mask) {
+                                               jobjectArray jboxcoords, jobjectArray objnames, jlong outputmaskaddress) {
 
     LOGI("infer SNPE S");
 
@@ -125,7 +124,7 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
     std::vector<std::vector<float>> BB_coords;
     std::vector<std::string> BB_names;
 
-    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names, output_mask, generate_mask);
+    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names, output_mask);
 
     if(numberofobj ==0)
         {

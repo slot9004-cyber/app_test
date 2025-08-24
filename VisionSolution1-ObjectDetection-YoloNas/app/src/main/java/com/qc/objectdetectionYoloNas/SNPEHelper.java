@@ -28,7 +28,7 @@ public class SNPEHelper {
     //Native functions
     public native String queryRuntimes(String a);
     public native String initSNPE(AssetManager assetManager, char a);
-    public native int inferSNPE(long inputmataddress, int width,int height, float[][]boxcoords, String[] classname, long outputmaskaddress, boolean generate_mask);
+    public native int inferSNPE(long inputmataddress, int width,int height, float[][]boxcoords, String[] classname, long outputmaskaddress);
 
 
     /**
@@ -57,7 +57,7 @@ public class SNPEHelper {
     /*
         This method makes inference on bitmap.
     */
-    public Mat snpeInference(Bitmap modelInputBitmap, int fps, ArrayList<RectangleBox> BBlist, boolean generate_mask) {
+    public Mat snpeInference(Bitmap modelInputBitmap, int fps, ArrayList<RectangleBox> BBlist) {
 
         try{
 
@@ -69,7 +69,7 @@ public class SNPEHelper {
             String[] boxnames = new String[100];
 
 
-            int numhuman = inferSNPE(inputMat.getNativeObjAddr(), modelInputBitmap.getWidth(), modelInputBitmap.getHeight(), boxCoords,boxnames, outputMask.getNativeObjAddr(), generate_mask);
+            int numhuman = inferSNPE(inputMat.getNativeObjAddr(), modelInputBitmap.getWidth(), modelInputBitmap.getHeight(), boxCoords,boxnames, outputMask.getNativeObjAddr());
 
             for(int k=0;k<numhuman;k++) {
                 RectangleBox tempbox = new RectangleBox();

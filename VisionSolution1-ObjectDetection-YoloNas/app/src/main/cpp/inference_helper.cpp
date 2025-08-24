@@ -236,6 +236,8 @@ void createInputBufferMap(zdl::DlSystem::UserBufferMap& inputMap,
     }
 }
 
+#include <algorithm>
+
 void preprocess_BB(std::vector<float32_t> &dest_buffer, cv::Mat &img, PaddingInfo& padding_info)
 {
     int input_width = 512;
@@ -246,8 +248,6 @@ void preprocess_BB(std::vector<float32_t> &dest_buffer, cv::Mat &img, PaddingInf
     padding_info.scale = std::min((float)input_width / img_width, (float)input_height / img_height);
     int scaled_width = (int)(img_width * padding_info.scale);
     int scaled_height = (int)(img_height * padding_info.scale);
-    padding_info.scaled_width = scaled_width;
-    padding_info.scaled_height = scaled_height;
 
     cv::Mat resized_img;
     cv::resize(img, resized_img, cv::Size(scaled_width, scaled_height), 0, 0, cv::INTER_LINEAR);

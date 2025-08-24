@@ -17,13 +17,9 @@ import android.graphics.Point;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
-import android.content.ContentValues;
 import android.graphics.SurfaceTexture;
-import android.graphics.drawable.BitmapDrawable;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
-import android.net.Uri;
-import android.os.Build;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
@@ -39,13 +35,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
-import java.io.OutputStream;
 import android.support.v4.app.DialogFragment;
-import android.provider.MediaStore;
+import org.opencv.android.Utils;
+import org.opencv.core.Mat;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.ContextCompat;
 import android.util.Size;
-import org.opencv.android.Utils;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -77,13 +72,9 @@ public class CameraFragment extends Fragment {
     private FragmentRender mFragmentRender;
     private Button confirmButton;
     private Button backButton;
-    private Button snapshotButton;
-    private View splitScreenLayout;
-    private ImageView topImageView;
-    private ImageView bottomImageView;
+    private ImageView maskedPreviewOverlay;
     private ArrayList<RectangleBox> selectedBoxes = new ArrayList<>();
     private boolean isConfirmed = false;
-    private Bitmap lastBitmap = null;
 
     public int fps = 0, frame_count = -1;
     public static char runtime_var;
@@ -206,14 +197,10 @@ public class CameraFragment extends Fragment {
         mFragmentRender = view.findViewById(R.id.fragmentRender);
         confirmButton = view.findViewById(R.id.confirmButton);
         backButton = view.findViewById(R.id.backButton);
-        snapshotButton = view.findViewById(R.id.snapshotButton);
-        splitScreenLayout = view.findViewById(R.id.split_screen_layout);
-        topImageView = view.findViewById(R.id.top_image_view);
-        bottomImageView = view.findViewById(R.id.bottom_image_view);
+        maskedPreviewOverlay = view.findViewById(R.id.masked_preview_overlay);
 
         confirmButton.setOnClickListener(v -> onConfirm());
         backButton.setOnClickListener(v -> onBack());
-        snapshotButton.setOnClickListener(v -> takeSnapshot());
         mFragmentRender.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 if (!isConfirmed) {
@@ -258,12 +245,6 @@ public class CameraFragment extends Fragment {
             if (grantResults.length != 1 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 ErrorDialog.newInstance(getString(R.string.request_permission))
                         .show(getChildFragmentManager(), FRAGMENT_DIALOG);
-            }
-        } else if (requestCode == REQUEST_STORAGE_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                saveImages();
-            } else {
-                showToast("Storage permission is required to save snapshots.");
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -515,15 +496,35 @@ public class CameraFragment extends Fragment {
                 }
             } catch (Exception e) { e.printStackTrace(); }
 
-            if (mNetworkLoaded && !isConfirmed) {
-                lastBitmap = mTextureView.getBitmap();
-                if (lastBitmap == null) return;
+            if (mNetworkLoaded) {
+                Bitmap mBitmap = mTextureView.getBitmap();
+                if (mBitmap == null) return;
 
                 ArrayList<RectangleBox> newBoxes = new ArrayList<>();
-                // Only get bounding boxes for live preview
-                mSnpeHelper.snpeInference(lastBitmap, fps, newBoxes, false);
+                Mat returnedMask = mSnpeHelper.snpeInference(mBitmap, fps, newBoxes);
                 ArrayList<RectangleBox> trackedBoxes = trackSelectedObjects(newBoxes);
-                mFragmentRender.setCoordsList(trackedBoxes);
+
+                if (!isConfirmed) {
+                    mFragmentRender.setCoordsList(trackedBoxes);
+                } else {
+                    if (returnedMask != null && !returnedMask.empty()) {
+                        Bitmap maskBitmap = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+                        Utils.matToBitmap(returnedMask, maskBitmap);
+
+                        // To make the mask white as requested
+                        Bitmap whiteMaskBitmap = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+                        Canvas canvas = new Canvas(whiteMaskBitmap);
+                        canvas.drawColor(Color.TRANSPARENT); // transparent background
+                        Paint paint = new Paint();
+                        paint.setColorFilter(new android.graphics.PorterDuffColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN));
+                        canvas.drawBitmap(maskBitmap, 0, 0, paint);
+
+
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> maskedPreviewOverlay.setImageBitmap(whiteMaskBitmap));
+                        }
+                    }
+                }
             }
         }
     }
@@ -541,52 +542,19 @@ public class CameraFragment extends Fragment {
             showToast("Please select at least one person.");
             return;
         }
-        if (lastBitmap == null) {
-            showToast("Please wait for camera preview.");
-            return;
-        }
-
-        // Run inference one more time with mask generation enabled
-        ArrayList<RectangleBox> finalBoxes = new ArrayList<>();
-        org.opencv.core.Mat returnedMask = mSnpeHelper.snpeInference(lastBitmap, fps, finalBoxes, true);
-
-        // --- UI Update ---
         isConfirmed = true;
         confirmButton.setVisibility(View.GONE);
-        mFragmentRender.setVisibility(View.GONE);
         backButton.setVisibility(View.VISIBLE);
-        snapshotButton.setVisibility(View.VISIBLE);
-        splitScreenLayout.setVisibility(View.VISIBLE);
-
-        // Create and display the bitmaps for the split-screen view
-        Bitmap topBitmap = lastBitmap.copy(Bitmap.Config.ARGB_8888, true);
-        Bitmap maskBitmap = Bitmap.createBitmap(topBitmap.getWidth(), topBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-        if (returnedMask != null && !returnedMask.empty()) {
-            Utils.matToBitmap(returnedMask, maskBitmap);
-        }
-
-        // Create a bitmap for the overlay
-        Bitmap overlayBitmap = Bitmap.createBitmap(topBitmap.getWidth(), topBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-        Canvas overlayCanvas = new Canvas(overlayBitmap);
-        Paint overlayPaint = new Paint();
-        overlayPaint.setColor(Color.argb(128, 255, 255, 255)); // White with 50% alpha
-        overlayCanvas.drawBitmap(maskBitmap, 0, 0, overlayPaint);
-
-        // Draw the overlay on top of the original image
-        Canvas finalCanvas = new Canvas(topBitmap);
-        finalCanvas.drawBitmap(overlayBitmap, 0,0, null);
-
-        topImageView.setImageBitmap(topBitmap);
-        bottomImageView.setImageBitmap(maskBitmap);
+        maskedPreviewOverlay.setVisibility(View.VISIBLE);
+        mFragmentRender.setVisibility(View.GONE);
     }
 
     private void onBack() {
         isConfirmed = false;
         confirmButton.setVisibility(View.VISIBLE);
-        mFragmentRender.setVisibility(View.VISIBLE);
         backButton.setVisibility(View.GONE);
-        snapshotButton.setVisibility(View.GONE);
-        splitScreenLayout.setVisibility(View.GONE);
+        maskedPreviewOverlay.setVisibility(View.GONE);
+        mFragmentRender.setVisibility(View.VISIBLE);
         selectedBoxes.clear();
     }
 
@@ -627,47 +595,5 @@ public class CameraFragment extends Fragment {
         float b2_cx = (b2.left + b2.right) / 2;
         float b2_cy = (b2.top + b2.bottom) / 2;
         return (float) Math.sqrt(Math.pow(b1_cx - b2_cx, 2) + Math.pow(b1_cy - b2_cy, 2));
-    }
-
-    private static final int REQUEST_STORAGE_PERMISSION = 2;
-
-    private void takeSnapshot() {
-        if (ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_STORAGE_PERMISSION);
-        } else {
-            saveImages();
-        }
-    }
-
-    private void saveImages() {
-        try {
-            Bitmap topBitmap = ((BitmapDrawable) topImageView.getDrawable()).getBitmap();
-            Bitmap bottomBitmap = ((BitmapDrawable) bottomImageView.getDrawable()).getBitmap();
-
-            saveBitmap(topBitmap, "snapshot_top_" + System.currentTimeMillis() + ".png");
-            saveBitmap(bottomBitmap, "snapshot_bottom_" + System.currentTimeMillis() + ".png");
-
-            showToast("Snapshots saved!");
-        } catch (Exception e) {
-            e.printStackTrace();
-            showToast("Error saving snapshots.");
-        }
-    }
-
-    private void saveBitmap(Bitmap bitmap, String filename) throws IOException {
-        final ContentValues values = new ContentValues();
-        values.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
-        values.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
-        values.put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/YoloNAS_Snapshots");
-
-        final Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-        if (uri != null) {
-            try (final java.io.OutputStream out = getContext().getContentResolver().openOutputStream(uri)) {
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
-            }
-        } else {
-            throw new IOException("Failed to create new MediaStore record.");
-        }
     }
 }
