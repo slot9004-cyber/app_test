@@ -294,10 +294,16 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
         cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
         cv::Mat roi = img(final_box);
 
-        cv::Mat colored_overlay(roi.size(), roi.type(), color);
-        cv::Mat blended_roi;
-        cv::addWeighted(roi, 0.5, colored_overlay, 0.5, 0.0, blended_roi);
-        blended_roi.copyTo(roi, binary_mask);
+        for(int r=0; r<final_box.height; ++r) {
+            for(int c=0; c<final_box.width; ++c) {
+                if(binary_mask.at<uchar>(r,c) > 0) {
+                    cv::Vec4b& pixel = roi.at<cv::Vec4b>(r,c);
+                    pixel[0] = cv::saturate_cast<uchar>(pixel[0] * 0.5 + color[0] * 0.5); // B
+                    pixel[1] = cv::saturate_cast<uchar>(pixel[1] * 0.5 + color[1] * 0.5); // G
+                    pixel[2] = cv::saturate_cast<uchar>(pixel[2] * 0.5 + color[2] * 0.5); // R
+                }
+            }
+        }
     }
 
     if (g_enable_debug) {
