@@ -171,8 +171,8 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
         return false;
     }
 
-    std::string box_score_coeffs_name = "output1";
-    std::string mask_prototypes_name = "output0";
+    std::string box_score_coeffs_name = "output0";
+    std::string mask_prototypes_name = "output1";
 
     ATrace_endSection();
     gettimeofday(&start_time, NULL);
@@ -192,8 +192,8 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
         return false;
     }
 
-    const auto& box_score_coeffs_buf = applicationOutputBuffers.at(box_score_coeffs_name);
-    const auto& mask_prototypes_buf = applicationOutputBuffers.at(mask_prototypes_name);
+    const auto& output0_buf = applicationOutputBuffers.at(box_score_coeffs_name);
+    const auto& output1_buf = applicationOutputBuffers.at(mask_prototypes_name);
 
     const int num_proposals = 8400;
     const int num_classes = 80;
@@ -209,7 +209,7 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
     std::vector<float> output0_transposed(num_proposals * proposal_size);
     for (int i = 0; i < num_proposals; ++i) {
         for (int j = 0; j < proposal_size; ++j) {
-            output0_transposed[i * proposal_size + j] = box_score_coeffs_buf[j * num_proposals + i];
+            output0_transposed[i * proposal_size + j] = output0_buf[j * num_proposals + i];
         }
     }
 
@@ -239,19 +239,18 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
 
     LOGI("Found %zu boxes above confidence threshold", boxes.size());
 
-    // std::vector<int> indices;
-    // cv::dnn::NMSBoxes(boxes, confidences, conf_threshold, iou_threshold, indices);
+    std::vector<int> indices;
+    cv::dnn::NMSBoxes(boxes, confidences, conf_threshold, iou_threshold, indices);
 
-    // numberofobj = indices.size();
-    // if (numberofobj == 0) {
-    //     mtx.unlock();
-    //     return true;
-    // }
+    numberofobj = indices.size();
+    if (numberofobj == 0) {
+        mtx.unlock();
+        return true;
+    }
 
     float ratio_w = (float)orig_width / input_width;
     float ratio_h = (float)orig_height / input_height;
 
-    /*
     for (int idx : indices) {
         if (class_ids[idx] != 0) continue; // Only process "person" class
 
@@ -261,7 +260,7 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
         BB_names.push_back(classnamemapping[class_ids[idx]]);
 
         cv::Mat mat_coeffs(1, num_mask_coeffs, CV_32F, mask_coeffs_vec[idx].data());
-        cv::Mat mat_prototypes(num_mask_coeffs, mask_width * mask_height, CV_32F, (float*)mask_prototypes_buf.data());
+        cv::Mat mat_prototypes(num_mask_coeffs, mask_width * mask_height, CV_32F, (float*)output1_buf.data());
         cv::Mat mat_mul = mat_coeffs * mat_prototypes;
 
         cv::Mat mask_mat(mask_height, mask_width, CV_32F, mat_mul.data);
@@ -308,7 +307,6 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
             }
         }
     }
-    */
 
     if (g_enable_debug) {
         // Save pre-processed input
