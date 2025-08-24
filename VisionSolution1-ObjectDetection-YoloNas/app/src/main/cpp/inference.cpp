@@ -213,29 +213,31 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
         }
     }
 
-    // std::vector<cv::Rect> boxes;
-    // std::vector<float> confidences;
-    // std::vector<int> class_ids;
-    // std::vector<std::vector<float>> mask_coeffs_vec;
+    std::vector<cv::Rect> boxes;
+    std::vector<float> confidences;
+    std::vector<int> class_ids;
+    std::vector<std::vector<float>> mask_coeffs_vec;
 
-    // for (int i = 0; i < num_proposals; ++i) {
-    //     float* proposal = output0_transposed.data() + i * proposal_size;
-    //     float* class_scores = proposal + 4;
-    //     auto max_it = std::max_element(class_scores, class_scores + num_classes);
-    //     float confidence = *max_it;
-    //     int class_id = std::distance(class_scores, max_it);
+    for (int i = 0; i < num_proposals; ++i) {
+        float* proposal = output0_transposed.data() + i * proposal_size;
+        float* class_scores = proposal + 4;
+        auto max_it = std::max_element(class_scores, class_scores + num_classes);
+        float confidence = *max_it;
+        int class_id = std::distance(class_scores, max_it);
 
-    //     if (confidence > conf_threshold) {
-    //         float cx = proposal[0];
-    //         float cy = proposal[1];
-    //         float w = proposal[2];
-    //         float h = proposal[3];
-    //         boxes.emplace_back(cx - w / 2, cy - h / 2, w, h);
-    //         confidences.push_back(confidence);
-    //         class_ids.push_back(class_id);
-    //         mask_coeffs_vec.emplace_back(proposal + 4 + num_classes, proposal + proposal_size);
-    //     }
-    // }
+        if (confidence > conf_threshold) {
+            float cx = proposal[0];
+            float cy = proposal[1];
+            float w = proposal[2];
+            float h = proposal[3];
+            boxes.emplace_back(cx - w / 2, cy - h / 2, w, h);
+            confidences.push_back(confidence);
+            class_ids.push_back(class_id);
+            mask_coeffs_vec.emplace_back(proposal + 4 + num_classes, proposal + proposal_size);
+        }
+    }
+
+    LOGI("Found %zu boxes above confidence threshold", boxes.size());
 
     // std::vector<int> indices;
     // cv::dnn::NMSBoxes(boxes, confidences, conf_threshold, iou_threshold, indices);
