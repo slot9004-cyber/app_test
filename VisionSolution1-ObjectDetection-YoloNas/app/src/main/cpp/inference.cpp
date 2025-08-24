@@ -230,10 +230,12 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
             float cy = proposal[1];
             float w = proposal[2];
             float h = proposal[3];
-            boxes.emplace_back(cx - w / 2, cy - h / 2, w, h);
-            confidences.push_back(confidence);
-            class_ids.push_back(class_id);
-            mask_coeffs_vec.emplace_back(proposal + 4 + num_classes, proposal + proposal_size);
+            if (w > 0 && h > 0) {
+                boxes.emplace_back(cx - w / 2, cy - h / 2, w, h);
+                confidences.push_back(confidence);
+                class_ids.push_back(class_id);
+                mask_coeffs_vec.emplace_back(proposal + 4 + num_classes, proposal + proposal_size);
+            }
         }
     }
 
