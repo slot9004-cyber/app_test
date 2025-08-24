@@ -13,6 +13,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <vector>
+#include <cmath>
 #include <hpp/inference.h>
 
 #include "android/log.h"
@@ -230,7 +231,7 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
             float cy = proposal[1];
             float w = proposal[2];
             float h = proposal[3];
-            if (w > 0 && h > 0) {
+            if (std::isfinite(cx) && std::isfinite(cy) && std::isfinite(w) && std::isfinite(h) && w > 0 && h > 0) {
                 boxes.emplace_back(cx - w / 2, cy - h / 2, w, h);
                 confidences.push_back(confidence);
                 class_ids.push_back(class_id);
