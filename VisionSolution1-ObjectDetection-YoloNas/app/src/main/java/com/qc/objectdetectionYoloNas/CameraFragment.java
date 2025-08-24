@@ -499,26 +499,15 @@ public class CameraFragment extends Fragment {
                 if (mBitmap == null) return;
 
                 ArrayList<RectangleBox> newBoxes = new ArrayList<>();
-                mSnpeHelper.snpeInference(mBitmap, fps, newBoxes);
+                Bitmap maskBitmap = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+                mSnpeHelper.snpeInference(mBitmap, maskBitmap, selectedBoxes, fps, newBoxes);
                 ArrayList<RectangleBox> trackedBoxes = trackSelectedObjects(newBoxes);
 
                 if (!isConfirmed) {
                     mFragmentRender.setCoordsList(trackedBoxes);
                 } else {
-                    Bitmap overlayBitmap = Bitmap.createBitmap(mBitmap.getWidth(), mBitmap.getHeight(), Bitmap.Config.ARGB_8888);
-                    Canvas canvas = new Canvas(overlayBitmap);
-                    Paint whitePaint = new Paint();
-                    whitePaint.setColor(Color.WHITE);
-                    whitePaint.setStyle(Paint.Style.FILL);
-
-                    for (RectangleBox box : trackedBoxes) {
-                        if (!box.selected && box.label.equals("person")) {
-                            canvas.drawRect(box.left, box.top, box.right, box.bottom, whitePaint);
-                        }
-                    }
-                    final Bitmap finalOverlay = overlayBitmap;
                     if (getActivity() != null) {
-                        getActivity().runOnUiThread(() -> maskedPreviewOverlay.setImageBitmap(finalOverlay));
+                        getActivity().runOnUiThread(() -> maskedPreviewOverlay.setImageBitmap(maskBitmap));
                     }
                 }
             }

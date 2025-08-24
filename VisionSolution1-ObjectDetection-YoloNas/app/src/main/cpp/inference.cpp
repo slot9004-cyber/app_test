@@ -189,7 +189,15 @@ std::string build_network_BB(const uint8_t * dlc_buffer_BB, const size_t dlc_siz
 
 
 
-bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask) {
+float getCenterDistance(const cv::Rect& b1, const cv::Rect& b2) {
+    float b1_cx = b1.x + b1.width / 2.0f;
+    float b1_cy = b1.y + b1.height / 2.0f;
+    float b2_cx = b2.x + b2.width / 2.0f;
+    float b2_cy = b2.y + b2.height / 2.0f;
+    return std::sqrt(std::pow(b1_cx - b2_cx, 2) + std::pow(b1_cy - b2_cy, 2));
+}
+
+bool executeDLC(cv::Mat &img, int orig_width, int orig_height, const std::vector<cv::Rect>& selected_boxes, int &numberofobj, std::vector<std::vector<float>> &BB_coords, std::vector<std::string> &BB_names, cv::Mat& combined_mask) {
 
     LOGI("execute_net_BB");
     ATrace_beginSection("preprocessing");
@@ -308,25 +316,35 @@ bool executeDLC(cv::Mat &img, int orig_width, int orig_height, int &numberofobj,
         BB_coords.push_back({(float)box.x, (float)box.y, (float)(box.x + box.width), (float)(box.y + box.height), milli_time});
         BB_names.push_back("person");
 
-        // Reconstruct mask for the detected object
-        cv::Mat mask_coeffs = proposal_mask_coeffs[idx];
-        cv::Mat matmul_result;
-        cv::gemm(mask_coeffs, proto_masks, 1.0, cv::Mat(), 0.0, matmul_result);
-        cv::Mat final_mask = matmul_result.reshape(1, {MASK_HEIGHT, MASK_WIDTH});
+        bool is_selected = false;
+        for (const auto& selected_box : selected_boxes) {
+            if (getCenterDistance(box, selected_box) < 75) { // Using same threshold as Java code
+                is_selected = true;
+                break;
+            }
+        }
 
-        // Apply sigmoid
-        cv::exp(-final_mask, final_mask);
-        final_mask = 1.0 / (1.0 + final_mask);
+        if (!is_selected) {
+            // Reconstruct mask for the detected object
+            cv::Mat mask_coeffs = proposal_mask_coeffs[idx];
+            cv::Mat matmul_result;
+            cv::gemm(mask_coeffs, proto_masks, 1.0, cv::Mat(), 0.0, matmul_result);
+            cv::Mat final_mask = matmul_result.reshape(1, {MASK_HEIGHT, MASK_WIDTH});
 
-        // Binarize the mask
-        cv::Mat binary_mask = final_mask > 0.5;
+            // Apply sigmoid
+            cv::exp(-final_mask, final_mask);
+            final_mask = 1.0 / (1.0 + final_mask);
 
-        // Upscale the binary mask to original image size
-        cv::Mat upscaled_mask;
-        cv::resize(binary_mask, upscaled_mask, cv::Size(orig_width, orig_height), 0, 0, cv::INTER_NEAREST);
+            // Binarize the mask
+            cv::Mat binary_mask = final_mask > 0.5;
 
-        // Combine with the main mask using bitwise OR
-        combined_mask |= upscaled_mask;
+            // Upscale the binary mask to original image size
+            cv::Mat upscaled_mask;
+            cv::resize(binary_mask, upscaled_mask, cv::Size(orig_width, orig_height), 0, 0, cv::INTER_NEAREST);
+
+            // Combine with the main mask using bitwise OR
+            combined_mask |= upscaled_mask;
+        }
     }
 
     ATrace_endSection();

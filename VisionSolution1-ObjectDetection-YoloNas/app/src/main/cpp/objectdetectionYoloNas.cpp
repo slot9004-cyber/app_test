@@ -11,6 +11,7 @@ using namespace cv;
 #include <iostream>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
+#include <android/bitmap.h>
 
 #include "hpp/inference.h"
 #include "hpp/Util.hpp"
@@ -113,7 +114,8 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_initSNPE(JNIEnv *env, jobject thiz
 //inference
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thiz, jlong inputMat, jint actual_width, jint actual_height,
+Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thiz, jlong inputMat, jobject maskBitmap,
+                                               jobjectArray selectedBoxCoords, jint actual_width, jint actual_height,
                                                jobjectArray jboxcoords, jobjectArray objnames) {
 
     LOGI("infer SNPE S");
@@ -124,8 +126,17 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
     std::vector<std::vector<float>> BB_coords;
     std::vector<std::string> BB_names;
     cv::Mat combined_mask;
+    std::vector<cv::Rect> selected_boxes;
 
-    bool status = executeDLC(img,actual_width, actual_height, numberofobj, BB_coords, BB_names, combined_mask);
+    int num_selected = env->GetArrayLength(selectedBoxCoords);
+    for (int i = 0; i < num_selected; i++) {
+        jfloatArray box_array = (jfloatArray)env->GetObjectArrayElement(selectedBoxCoords, i);
+        jfloat* box_ptr = env->GetFloatArrayElements(box_array, 0);
+        selected_boxes.push_back(cv::Rect(box_ptr[0], box_ptr[1], box_ptr[2] - box_ptr[0], box_ptr[3] - box_ptr[1]));
+        env->ReleaseFloatArrayElements(box_array, box_ptr, 0);
+    }
+
+    bool status = executeDLC(img, actual_width, actual_height, selected_boxes, numberofobj, BB_coords, BB_names, combined_mask);
 
     if(numberofobj ==0)
         {
@@ -137,21 +148,38 @@ Java_com_qc_objectdetectionYoloNas_SNPEHelper_inferSNPE(JNIEnv *env, jobject thi
         return 0;
     }
     else {
-        //LOGI("number of detected objects: %d",numberofobj);
-
         for (int z = 0; z < numberofobj; z++){
             jfloatArray boxcoords = (jfloatArray) env->GetObjectArrayElement(jboxcoords, z);
             env->SetObjectArrayElement(objnames, z,env->NewStringUTF(BB_names[z].data()));
-
 
             float tempbox[5]; //4 coords and 1 processing time
             for(int k=0;k<5;k++)
                 tempbox[k]=BB_coords[z][k];
             env->SetFloatArrayRegion(boxcoords,0,5,tempbox);
         }
-        //LOGI("executeDLC_returned successfully");
-    }
-    //LOGD("infer SNPE E");
-    return numberofobj;
 
+        // Convert cv::Mat mask to Android Bitmap
+        AndroidBitmapInfo mask_info;
+        void* mask_pixels;
+        if (AndroidBitmap_getInfo(env, maskBitmap, &mask_info) < 0) {
+            LOGE("Failed to get bitmap info");
+            return 0;
+        }
+        if (mask_info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+            LOGE("Bitmap format is not RGBA_8888");
+            return 0;
+        }
+        if (AndroidBitmap_lockPixels(env, maskBitmap, &mask_pixels) < 0) {
+            LOGE("Failed to lock bitmap pixels");
+            return 0;
+        }
+
+        cv::Mat mask_rgba(mask_info.height, mask_info.width, CV_8UC4, mask_pixels);
+        cv::Mat gray_mask;
+        cv::cvtColor(combined_mask, gray_mask, cv::COLOR_GRAY2BGRA); // Convert single channel to 4 channels
+        gray_mask.copyTo(mask_rgba);
+
+        AndroidBitmap_unlockPixels(env, maskBitmap);
+    }
+    return numberofobj;
 }
