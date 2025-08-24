@@ -250,6 +250,8 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
     float ratio_h = (float)orig_height / input_height;
 
     for (int idx : indices) {
+        if (class_ids[idx] != 0) continue; // Only process "person" class
+
         cv::Rect box = boxes[idx];
         std::vector<float> singleboxcoords{box.x * ratio_w, box.y * ratio_h, (box.x + box.width) * ratio_w, (box.y + box.height) * ratio_h, milli_time};
         BB_coords.push_back(singleboxcoords);
@@ -292,17 +294,10 @@ bool execute_segmentation(cv::Mat &img, int orig_width, int orig_height, int &nu
         cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
         cv::Mat roi = img(final_box);
 
-        for(int r=0; r<final_box.height; ++r) {
-            for(int c=0; c<final_box.width; ++c) {
-                if(binary_mask.at<uchar>(r,c) > 0) {
-                    cv::Vec4b& pixel = roi.at<cv::Vec4b>(r,c);
-                    pixel[0] = cv::saturate_cast<uchar>(pixel[0] * 0.5 + color[0] * 0.5); // B
-                    pixel[1] = cv::saturate_cast<uchar>(pixel[1] * 0.5 + color[1] * 0.5); // G
-                    pixel[2] = cv::saturate_cast<uchar>(pixel[2] * 0.5 + color[2] * 0.5); // R
-                }
-            }
-        }
-        cv::rectangle(img, final_box, cv::Scalar(0, 255, 0, 255), 2);
+        cv::Mat colored_overlay(roi.size(), roi.type(), color);
+        cv::Mat blended_roi;
+        cv::addWeighted(roi, 0.5, colored_overlay, 0.5, 0.0, blended_roi);
+        blended_roi.copyTo(roi, binary_mask);
     }
 
     if (g_enable_debug) {
